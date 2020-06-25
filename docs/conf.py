@@ -364,7 +364,10 @@ intersphinx_mapping = {
     'https://zopesite.readthedocs.io/en/latest/': None,
     'https://zopetraversing.readthedocs.io/en/latest/': None,
     'https://zopelifecycleevent.readthedocs.io/en/latest/': None,
+    'https://zopesecurity.readthedocs.io/en/latest/': None,
+    'https://zopeprincipalregistry.readthedocs.io/en/latest/': None,
     'https://ntitesting.readthedocs.io/en/latest/': None,
+    'https://ntischema.readthedocs.io/en/latest/': None,
 }
 
 extlinks = {'issue': ('https://github.com/NextThought/nti.webhooks/issues/%s',
