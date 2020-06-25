@@ -52,8 +52,13 @@ setup(
     package_dir={'': 'src'},
     namespace_packages=['nti'],
     install_requires=[
+        'zope.authentication', # IAuthentication
         'zope.interface >= 5.1',
         'zope.event',
+        'zope.security', # IPrincipal, Permission
+        'zope.principalregistry', # TextId
+        'nti.externalization >= 1.1.3',
+        'nti.schema',
         'setuptools',
         'transaction',
     ],

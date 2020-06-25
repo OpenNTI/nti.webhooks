@@ -363,6 +363,7 @@ intersphinx_mapping = {
     'https://zopecomponent.readthedocs.io/en/latest/': None,
     'https://zopesite.readthedocs.io/en/latest/': None,
     'https://zopetraversing.readthedocs.io/en/latest/': None,
+    'https://zopelifecycleevent.readthedocs.io/en/latest/': None,
     'https://ntitesting.readthedocs.io/en/latest/': None,
 }
 
