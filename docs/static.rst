@@ -16,7 +16,24 @@ of the application using `z3c.baseregistry`_.
 
 Let's look at an example of how to use this directive from ZCML. We
 need to define the XML namespace it's in, and we need to include the
-configuration file that defines it:
+configuration file that defines it. We also need to have the event
+dispatching provided by :mod:`zope.component` properly set up, so we
+include that as well.
+
+.. register a dummy delivery manager, because registering the
+   component itself fires object events
+
+.. doctest::
+   :hide:
+
+   >>> from zope import interface
+   >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
+   >>> @interface.implementer(IWebhookDeliveryManager)
+   ... class _DeliveryMan(object):
+   ...    def temp(self, data, event):
+   ...        pass
+   >>> from zope import component
+   >>> component.provideUtility(_DeliveryMan())
 
 .. doctest::
 
@@ -26,7 +43,8 @@ configuration file that defines it:
    ...     xmlns="http://namespaces.zope.org/zope"
    ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
    ...     >
-   ...    <include package="nti.webhooks" file="meta.zcml" />
+   ...   <include package="zope.component" />
+   ...   <include package="nti.webhooks" file="meta.zcml" />
    ... </configure>
    ... """)
 
@@ -47,6 +65,14 @@ There is only one required argument: the destination URL.
    ... </configure>
    ... """, conf_context)
 
+.. clean up that registration; it won't work yet.
+
+.. doctest::
+   :hide:
+
+   >>> from zope.testing import cleanup
+   >>> cleanup.cleanUp()
+
 The destination must be HTTPS.
 
 .. doctest::
@@ -65,15 +91,15 @@ The destination must be HTTPS.
        File "<string>", line 6.2-6.57
        zope.schema.interfaces.InvalidURI: http://example.com
 
-
 The above registration will try to send *all* ``IObjectEvent`` events
 for *all* objects (that implement an interface) to
 ``https://example.com`` using the default dialect. That's unlikely to
 be what you want, outside of tests. Instead, you'll want to limit the
 event to particular kinds of objects, and particular events in their
 lifecycle. The ``for`` and ``when`` attributes let you do that. Here,
-we'll say that whenever a new :class:`zope.container.interfaces.IContainer`
-is created, we'd like to deliver a webhook.
+we'll give a comple example saying that whenever a new
+:class:`zope.container.interfaces.IContainer` is created, we'd like to
+deliver a webhook.
 
 .. doctest::
 
@@ -82,12 +108,63 @@ is created, we'd like to deliver a webhook.
    ...     xmlns="http://namespaces.zope.org/zope"
    ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
    ...     >
+   ...   <include package="zope.component" />
+   ...   <include package="zope.container" />
+   ...   <include package="nti.webhooks" file="meta.zcml" />
    ...   <webhooks:staticSubscription
    ...             to="https://example.com"
-   ...             for="zope.container.interfaces.IContainer"
+   ...             for="zope.container.interfaces.IContentContainer"
    ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent" />
    ... </configure>
-   ... """, conf_context)
+   ... """)
 
+Now that we have that in place, lets attempt to deliver a webhook.
+First, we'll send something that doesn't match our criteria and notice
+nothing happens:
+
+.. doctest::
+
+   >>> from zope.event import notify
+   >>> from zope import lifecycleevent
+   >>> lifecycleevent.created(object())
+
+Next, we'll create a container and notify that it has been created:
+
+.. doctest::
+
+   >>> from zope.container.folder import Folder
+   >>> lifecycleevent.created(Folder())
+   Traceback (most recent call last):
+   ...
+   zope.interface.interfaces.ComponentLookupError: (<InterfaceClass nti.webhooks.interfaces.IWebhookDeliveryManager>, '')
+
+Whoops! We need to have a ``IWebhookDeliveryManager`` utility
+available in order for this to work. Loading the configuration of this
+package will provide such a utility (and that's usually the one you
+want), but for the sake of example we'll register our own now:
+
+.. doctest::
+
+   >>> from zope import interface
+   >>> from zope import component
+   >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
+   >>> @interface.implementer(IWebhookDeliveryManager)
+   ... class TestingDeliveryMan(object):
+   ...    def temp(self, data, event):
+   ...        print("Asked to deliver a hook for", type(data).__name__,
+   ...              "from event", type(event).__name__)
+
+   >>> component.provideUtility(TestingDeliveryMan())
+
+
+Now we can ask for delivery:
+
+   >>> lifecycleevent.created(Folder())
+   Asked to deliver a hook for Folder from event ObjectCreatedEvent
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
+
+.. testcleanup::
+
+   from zope.testing import cleanup
+   cleanup.cleanUp()

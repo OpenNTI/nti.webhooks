@@ -16,10 +16,14 @@ from zope.schema.interfaces import InvalidURI
 from zope.interface import Interface
 from zope.interface.interfaces import IObjectEvent
 
+from zope.component.zcml import subscriber
+
 from zope.security.zcml import Permission
 from zope.principalregistry.metadirectives import TextId
 
 from nti.schema.field import ValidURI
+
+from .subscribers import on_webhook_event
 
 # pylint:disable=inherit-non-class
 
@@ -160,4 +164,5 @@ def static_subscription(context, **kwargs):
     if kwargs: # pragma: no cover
         raise TypeError
 
-    # print(dict(locals()))
+    subscriber(context, for_=(for_, when), handler=on_webhook_event,
+               trusted=True, locate=True)

@@ -13,6 +13,7 @@ TESTS_REQUIRE = [
     'coverage',
     'nti.testing',
     'zope.testrunner',
+    'zope.lifecycleevent',
 ]
 
 def _read(fname):
@@ -55,8 +56,6 @@ setup(
         'zope.authentication', # IAuthentication
         'zope.interface >= 5.1',
         'zope.container',
-        'zope.lifecycleevent',
-        'zope.event',
         'zope.security', # IPrincipal, Permission
         'zope.principalregistry', # TextId
         'nti.externalization >= 1.1.3',
@@ -72,6 +71,6 @@ setup(
             'Sphinx',
             'sphinx_rtd_theme',
             'repoze.sphinx.autointerface',
-        ],
+        ] + TESTS_REQUIRE,
     },
 )
