@@ -7,6 +7,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from zope.configuration.fields import GlobalObject
 from zope.configuration.fields import GlobalInterface
 from zope.schema import InterfaceField
 from zope.schema.interfaces import NotAnInterface
@@ -64,7 +65,7 @@ class _HTTPSURL(ValidURI):
 
     def _validate(self, value):
         super(_HTTPSURL, self)._validate(value)
-        if not value.lower.startswith('https://'):
+        if not value.lower().startswith('https://'):
             raise InvalidURI(value).with_field_and_value(self, value)
 
 class IStaticSubscriptionDirective(Interface):
@@ -78,12 +79,20 @@ class IStaticSubscriptionDirective(Interface):
 
     """
 
-    for_ = GlobalInterface(
+    for_ = GlobalObject(
         title=u"The type of object to attempt delivery for.",
         description=u"""
         When object events of type *when* are fired for instances
-        having this interface, webhook delivery to *target* might be attempted.
-        """
+        providing this interface, webhook delivery to *target* might be attempted.
+
+        The default is for *all* objects to fire webhooks. That's probably not
+        what you want and you should specify a particular interface.
+
+        This is interpreted as for :func:`zope.component.registerAdapter` and
+        may name an interface or a type.
+        """,
+        default=Interface,
+        required=False,
     )
 
     when = _ObjectEventInterface(
@@ -96,6 +105,8 @@ class IStaticSubscriptionDirective(Interface):
 
         If not specified, *all* object events involving the ``for_`` interface
         will be sent.
+
+        This must be an interface.
         """,
         default=IObjectEvent,
         required=False,
@@ -106,7 +117,8 @@ class IStaticSubscriptionDirective(Interface):
         description=u"""
         This is an arbitrary HTTPS URL. Only HTTPS is supported for
         delivery of webhooks.
-        """
+        """,
+        required=True,
     )
 
     # TODO: Where does specification of the request method go?
@@ -122,7 +134,8 @@ class IStaticSubscriptionDirective(Interface):
         a principal with the given ID, the delivery will be failed.
 
         Leave unset to disable security checks.
-        """
+        """,
+        required=False,
     )
 
     permission = Permission(
@@ -135,3 +148,16 @@ class IStaticSubscriptionDirective(Interface):
         """,
         required=False
     )
+
+
+def static_subscription(context, **kwargs):
+    to = kwargs.pop('to')
+    for_ = kwargs.pop('for_', None) or IStaticSubscriptionDirective['for_'].default
+    when = kwargs.pop('when', None) or IStaticSubscriptionDirective['when'].default
+    owner = kwargs.pop("owner", None)
+    permission = kwargs.pop('permission', None)
+
+    if kwargs: # pragma: no cover
+        raise TypeError
+
+    # print(dict(locals()))

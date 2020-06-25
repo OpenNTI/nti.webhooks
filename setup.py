@@ -54,6 +54,8 @@ setup(
     install_requires=[
         'zope.authentication', # IAuthentication
         'zope.interface >= 5.1',
+        'zope.container',
+        'zope.lifecycleevent',
         'zope.event',
         'zope.security', # IPrincipal, Permission
         'zope.principalregistry', # TextId
