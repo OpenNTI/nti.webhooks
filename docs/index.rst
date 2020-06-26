@@ -10,6 +10,7 @@ Contents:
 
    glossary
    static
+   api/index
    changelog
 
 

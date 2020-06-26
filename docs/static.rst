@@ -54,25 +54,6 @@ deliveries.
 
 There is only one required argument: the destination URL.
 
-.. doctest::
-
-   >>> conf_context = xmlconfig.string("""
-   ... <configure
-   ...     xmlns="http://namespaces.zope.org/zope"
-   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
-   ...     >
-   ...   <webhooks:staticSubscription to="https://example.com" />
-   ... </configure>
-   ... """, conf_context)
-
-.. clean up that registration; it won't work yet.
-
-.. doctest::
-   :hide:
-
-   >>> from zope.testing import cleanup
-   >>> cleanup.cleanUp()
-
 The destination must be HTTPS.
 
 .. doctest::
@@ -91,14 +72,55 @@ The destination must be HTTPS.
        File "<string>", line 6.2-6.57
        zope.schema.interfaces.InvalidURI: http://example.com
 
-The above registration will try to send *all* ``IObjectEvent`` events
-for *all* objects (that implement an interface) to
+
+.. doctest::
+
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <webhooks:staticSubscription to="https://example.com" />
+   ... </configure>
+   ... """, conf_context)
+
+.. clean up that registration, we don't actually want it
+
+.. doctest::
+   :hide:
+
+   >>> from zope.testing import cleanup
+   >>> cleanup.cleanUp()
+
+If we specify a permission to check, it must exist.
+
+.. doctest::
+
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <webhooks:staticSubscription
+   ...             to="https://example.com"
+   ...             permission="no.such.permission" />
+   ... </configure>
+   ... """, conf_context)
+   Traceback (most recent call last):
+   ...
+   zope.configuration.config.ConfigurationExecutionError: File "<string>", line 6.2-8.46
+     Could not read source.
+       ValueError: ('Undefined permission ID', 'no.such.permission')
+
+
+The above (successful) registration will try to send *all* ``IObjectEvent`` events
+for all objects that implement :class:`~nti.webhooks.interfaces.IWebhookPayload` to
 ``https://example.com`` using the default dialect. That's unlikely to
 be what you want, outside of tests. Instead, you'll want to limit the
 event to particular kinds of objects, and particular events in their
 lifecycle. The ``for`` and ``when`` attributes let you do that. Here,
 we'll give a comple example saying that whenever a new
-:class:`zope.container.interfaces.IContainer` is created, we'd like to
+:mod:`IContainer <zope.container.interfaces>` is created, we'd like to
 deliver a webhook.
 
 .. doctest::
@@ -118,7 +140,7 @@ deliver a webhook.
    ... </configure>
    ... """)
 
-Now that we have that in place, lets attempt to deliver a webhook.
+Now that we have that in place, let's attempt to deliver a webhook.
 First, we'll send something that doesn't match our criteria and notice
 nothing happens:
 

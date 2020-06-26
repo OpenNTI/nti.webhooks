@@ -71,6 +71,8 @@ limited to:
   here.
 - Providing a user interface or HTTPS API for viewing webhook audit
   logs.
+- Enabling webhooks to fire only for specific objects. This package
+  deals with scopes (sites) and kinds of objects, not individual instances.
 
 In Scope/Features
 =================
