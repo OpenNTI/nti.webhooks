@@ -11,11 +11,10 @@ from zope.configuration.fields import GlobalObject
 
 from zope.interface import Interface
 
-from zope.component.zcml import subscriber
-
 from zope.security.zcml import Permission
 
-from nti.webhooks.subscribers import on_webhook_event
+from nti.webhooks.subscriptions import Subscription
+from nti.webhooks.subscriptions import getGlobalSubscriptionManager
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks._schema import ObjectEventInterface
 
@@ -64,15 +63,33 @@ class IStaticSubscriptionDirective(Interface):
     )
 
 
+def _static_subscription_action(subscription_kwargs):
+    subscription = Subscription(**subscription_kwargs)
+    getGlobalSubscriptionManager().addSubscription(subscription)
+
 def static_subscription(context, **kwargs):
     to = kwargs.pop('to')
     for_ = kwargs.pop('for_', None) or IStaticSubscriptionDirective['for_'].default
     when = kwargs.pop('when', None) or IStaticSubscriptionDirective['when'].default
     owner = kwargs.pop("owner", None)
     permission = kwargs.pop('permission', None)
+    dialect = kwargs.pop('dialect', None)
 
     if kwargs: # pragma: no cover
         raise TypeError
 
-    subscriber(context, for_=(for_, when), handler=on_webhook_event,
-               trusted=True, locate=True)
+    subscription_kwargs = dict(to=to,
+                               for_=for_,
+                               when=when,
+                               owner_id=owner,
+                               permission_id=permission,
+                               dialect_id=dialect)
+
+    context.action(
+        # No conflicts. You can register as many identical hooks
+        # as you want.
+        # TODO: What makes the most sense?
+        discriminator=None,
+        callable=_static_subscription_action,
+        args=(subscription_kwargs,)
+    )

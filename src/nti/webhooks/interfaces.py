@@ -11,7 +11,7 @@ from zope.interface import Interface
 from zope.interface.interfaces import IInterface
 from zope.interface.interfaces import IObjectEvent
 
-from zope.container.interfaces import IContainer
+from zope.container.interfaces import IContainerNamesContainer
 from zope.container.constraints import contains
 from zope.container.constraints import containers
 
@@ -24,10 +24,9 @@ from zope.schema import Field
 from nti.schema.field import Object
 from nti.schema.field import ValidChoice as Choice
 
-from nti.webhooks._schema import ObjectEventInterface
 from nti.webhooks._schema import HTTPSURL
 
-# pylint:disable=inherit-non-class
+# pylint:disable=inherit-non-class,no-self-argument
 
 __all__ = [
     'IWebhookDeliveryManager',
@@ -69,7 +68,7 @@ class IWebhookSubscription(Interface):
 
     XXX: This is probably a container for the delivery items.
     """
-    containers('IWebhookSubscriptionManager')
+    containers('.IWebhookSubscriptionManager')
 
     for_ = Field(
         title=u"The type of object to attempt delivery for.",
@@ -127,7 +126,7 @@ class IWebhookSubscription(Interface):
         required=False,
     )
 
-    permission = Choice(
+    permission_id = Choice(
         title=u"The ID of the permission to check",
         description=u"""
         If given, and an *owner* is also specified, then only data that
@@ -153,10 +152,16 @@ class IWebhookSubscription(Interface):
     )
 
 
-class IWebhookSubscriptionManager(IContainer):
+class IWebhookSubscriptionManager(IContainerNamesContainer):
     """
     A utility that manages subscriptions.
 
     Also a registry for which subscriptions fire on what events.
     """
     contains(IWebhookSubscription)
+
+    def addSubscription(subscription):
+        """
+        XXX: Document me.
+        :param subscription: A `IWebhookSubscription`.
+        """

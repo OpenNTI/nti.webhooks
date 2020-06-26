@@ -59,6 +59,8 @@ setup(
         'zope.security', # IPrincipal, Permission
         'zope.principalregistry', # TextId
         'zope.componentvocabulary',
+        'zope.vocabularyregistry',
+        'zope.site',
         'nti.externalization >= 1.1.3',
         'nti.schema',
         'setuptools',
