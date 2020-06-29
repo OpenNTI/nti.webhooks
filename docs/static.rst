@@ -31,7 +31,7 @@ all of that.
    ...     >
    ...   <include package="nti.webhooks" />
    ... </configure>
-   ... """)
+   ... """, execute=False)
 
 Once that's done, we can use the ``webhooks:staticSubscription`` XML
 tag to define a subscription to start receiving our webhook
@@ -57,26 +57,6 @@ The destination must be HTTPS.
        File "<string>", line 6.2-6.57
        zope.schema.interfaces.InvalidURI: http://example.com
 
-
-.. doctest::
-
-   >>> conf_context = xmlconfig.string("""
-   ... <configure
-   ...     xmlns="http://namespaces.zope.org/zope"
-   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
-   ...     >
-   ...   <webhooks:staticSubscription to="https://example.com" />
-   ... </configure>
-   ... """, conf_context)
-
-.. clean up that registration, we don't actually want it
-
-.. doctest::
-   :hide:
-
-   >>> from nti.webhooks.subscriptions import resetGlobals
-   >>> resetGlobals()
-
 If we specify a permission to check, it must exist.
 
 .. doctest::
@@ -96,6 +76,12 @@ If we specify a permission to check, it must exist.
    zope.configuration.config.ConfigurationExecutionError: File "<string>", line 6.2-8.46
      Could not read source.
        ValueError: ('Undefined permission ID', 'no.such.permission')
+
+.. doctest::
+   :hide:
+
+   from zope.testing import cleanup
+   cleanup.cleanUp()
 
 
 The above (successful) registration will try to send *all* ``IObjectEvent`` events
@@ -117,15 +103,15 @@ deliver a webhook.
    ...     >
    ...   <include package="zope.component" />
    ...   <include package="zope.container" />
-   ...   <include package="nti.webhooks" file="meta.zcml" />
+   ...   <include package="nti.webhooks" />
    ...   <webhooks:staticSubscription
-   ...             to="https://example.com"
+   ...             to="https://this_domain_does_not_exist"
    ...             for="zope.container.interfaces.IContentContainer"
    ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent" />
    ... </configure>
    ... """)
 
-Now that we have that in place, let's verify that it exists and is active:
+Now that we have that in place, let's verify that it exists:
 
 .. doctest::
 
@@ -133,45 +119,74 @@ Now that we have that in place, let's verify that it exists and is active:
    >>> from zope import component
    >>> sub_manager = component.getUtility(IWebhookSubscriptionManager)
    >>> list(sub_manager.items())
-   [('Subscription', <...Subscription ... {'to': 'https://example.com', 'for_': <InterfaceClass ...IContentContainer>, 'when': <InterfaceClass ...IObjectCreatedEvent>...
+   [('Subscription', <...Subscription ... {'to': 'https://this_domain_does_not_exist', 'for_': <InterfaceClass ...IContentContainer>, 'when': <InterfaceClass ...IObjectCreatedEvent>...
+
+And we'll verify that it is :term:`active`, by looking for it using
+the event we just declared:
+
+.. doctest::
+
+   >>> from nti.webhooks.subscribers import find_active_subscriptions_for
+   >>> from zope.container.folder import Folder
+   >>> from zope.lifecycleevent import ObjectCreatedEvent
+   >>> event = ObjectCreatedEvent(Folder())
+   >>> len(find_active_subscriptions_for(event.object, event))
+   1
+   >>> find_active_subscriptions_for(event.object, event)
+   [<...Subscription ... {'to': 'https://this_domain_does_not_exist', 'for_': <InterfaceClass ...IContentContainer>, 'when': <InterfaceClass ...IObjectCreatedEvent>...
 
 
-..
-   Next, we'll create a container and notify that it has been created:
+Next, we need to know if the subscription is :term:`applicable` to the
+data. Since we didn't specify a permission or a principal to check, the subscription is applicable:
 
-   .. doctest::
+.. doctest::
 
-      >>> from zope.container.folder import Folder
-      >>> lifecycleevent.created(Folder())
-      Traceback (most recent call last):
-      ...
-      zope.interface.interfaces.ComponentLookupError: (<InterfaceClass nti.webhooks.interfaces.IWebhookDeliveryManager>, '')
+   >>> subscriptions = find_active_subscriptions_for(event.object, event)
+   >>> [subscription.isApplicable(event.object) for subscription in subscriptions]
+   [True]
 
-   Whoops! We need to have a ``IWebhookDeliveryManager`` utility
-   available in order for this to work. Loading the configuration of this
-   package will provide such a utility (and that's usually the one you
-   want), but for the sake of example we'll register our own now:
+Now lets demonstrate what happens when we actually fire this event. First, we must be in a transaction:
 
-   .. doctest::
+.. doctest::
 
-      >>> from zope import interface
-      >>> from zope import component
-      >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
-      >>> @interface.implementer(IWebhookDeliveryManager)
-      ... class TestingDeliveryMan(object):
-      ...    def temp(self, data, event):
-      ...        print("Asked to deliver a hook for", type(data).__name__,
-      ...              "from event", type(event).__name__)
+   >>> import transaction
+   >>> tx = transaction.begin()
 
-      >>> component.provideUtility(TestingDeliveryMan())
+Fire the event:
 
+.. doctest::
 
-   Now we can ask for delivery:
+   >>> from zope import lifecycleevent
+   >>> lifecycleevent.created(Folder())
 
-      >>> lifecycleevent.created(Folder())
-      Asked to deliver a hook for Folder from event ObjectCreatedEvent
+We can see that we have attached a data manager to the transaction:
+
+.. doctest::
+
+   >>> tx._resources
+   [<nti.webhooks.datamanager.WebhookDataManager...>]
+
+However, recall that we specified an invalid domain name, so there is
+no where to attempt to deliver the webhook too. For static webhooks,
+this is generally a deployment configuration problem and should be
+attended to by correcting the ZCML. For dynamic subscriptions, the
+error would be corrected by updating the subscription. This doesn't fail the commit:
+
+.. doctest::
+
+   >>> transaction.commit()
+
+But it does record a failed attempt in the subscription:
+
+.. doctest::
+
+   >>> subscription = sub_manager['Subscription']
+   >>> list(subscription.values())
+   [<...FailedDeliveryAttempt...>]
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
+
+
 
 .. testcleanup::
 

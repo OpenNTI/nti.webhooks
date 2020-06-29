@@ -21,9 +21,23 @@
     <!-- which is done when finding vocabularies -->
     <include package="zope.site" />
 
+    <!-- Basic externalization support -->
+    <include package="nti.externalization" />
+
+
     <!-- The global subscription manager -->
     <utility component=".subscriptions.global_subscription_manager"
              provides=".interfaces.IWebhookSubscriptionManager" />
 
 
+    <!-- Global event dispatcher -->
+    <subscriber
+        for="* zope.interface.interfaces.IObjectEvent"
+        handler=".subscribers.dispatch_webhook_event"
+        trusted="true"
+        />
+
+
+    <!-- The default dialect -->
+    <utility factory=".dialect.DefaultWebhookDialect" />
 </configure>

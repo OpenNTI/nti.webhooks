@@ -20,3 +20,18 @@
       history`.
 
       .. seealso:: :class:`~.IWebhookSubscription`
+
+   active
+      Of a subscription: An existing subscription is active if it
+      is ready to accept webhook deliveries. Contrast with
+      :term:`inactive`. A subscription in this state may transaction
+      to inactive at any time.
+
+   inactive
+      Of a subscription: An existing subscription is inactive if
+      webhook deliviries will no longer be attempted to it. It may
+      transaction back to :term:`active` at any time.
+
+   applicable
+      Of a subscription: Does the subscription apply to some piece of
+      data, including permission checks?

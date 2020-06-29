@@ -8,6 +8,7 @@ from __future__ import division
 from __future__ import print_function
 
 from zope.interface import Interface
+from zope.interface import Attribute
 from zope.interface.interfaces import IInterface
 from zope.interface.interfaces import IObjectEvent
 
@@ -61,14 +62,26 @@ class IWebhookDialect(Interface):
     Quirks for sending webhooks to specific services.
     """
 
+    def externalizeData(data):
+        """
+        Produce the byte-string that is the externalized version of *data*
+        needed to send to webhooks using this dialect.
 
-class IWebhookSubscription(Interface):
+        The default method will externalize the data using an :mod:`nti.externalization`
+        externalizer named "webhook-delivery".
+        """
+
+class IWebhookDeliveryAttempt(Interface):
+    containers('.IWebhookSubscription')
+
+class IWebhookSubscription(IContainerNamesContainer):
     """
     An individual subscription.
 
     XXX: This is probably a container for the delivery items.
     """
     containers('.IWebhookSubscriptionManager')
+    contains('.IWebhookDeliveryAttempt')
 
     for_ = Field(
         title=u"The type of object to attempt delivery for.",
@@ -150,6 +163,18 @@ class IWebhookSubscription(Interface):
         required=False,
         vocabulary=UtilityNames(IWebhookDialect),
     )
+
+    netloc = Attribute("The network host name portion of the URL.")
+
+    def isApplicable(data):
+        """
+        Determine if this subscription applies to the given *data*
+        object.
+
+        This does not take into account whether this subscription is
+        active or not, but does take into account the permission and principal
+        declared for the subscription as well as the type/interface.
+        """
 
 
 class IWebhookSubscriptionManager(IContainerNamesContainer):
