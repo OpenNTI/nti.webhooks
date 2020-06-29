@@ -7,12 +7,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import socket
 try:
     from urllib.parse import urlsplit
 except ImportError: # Py2
     from urlparse import urlsplit
 
-
+from zope import component
 from zope.interface import implementer
 from zope.component.globalregistry import BaseGlobalComponents
 
@@ -24,8 +25,12 @@ from zope.cachedescriptors.property import CachedProperty
 from nti.externalization.representation import WithRepr
 from nti.schema.fieldproperty import createDirectFieldProperties
 from nti.schema.schema import SchemaConfigured
+
+from nti.webhooks.interfaces import IWebhookDialect
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
+from nti.webhooks.attempts import WebhookDeliveryAttempt
+from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
 
 from persistent import Persistent
 
@@ -72,6 +77,12 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         # there are local principal registries.
         return False
 
+    @CachedProperty('dialect_id')
+    def dialect(self):
+        # Find the dialect with the given name, using our location
+        # as the context to find the enclosing site manager.
+        return component.getUtility(IWebhookDialect, self.dialect_id or u'', self)
+
     @CachedProperty('to')
     def netloc(self):
         """
@@ -79,18 +90,35 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         """
         return urlsplit(self.to).netloc
 
-    def addDeliveryAttempt(self, attempt):
-        while len(self) > self.MAXIMUM_LENGTH:
-            del self[self._SampleContainer__data.minKey()]
+    def _new_deliveryAttempt(self):
+        return WebhookDeliveryAttempt()
 
+    def createDeliveryAttempt(self, payload_data):
+        attempt = self._new_deliveryAttempt()
+        attempt.payload_data = payload_data
         name = INameChooser(self).chooseName('', attempt) # pylint:disable=too-many-function-args,assignment-from-no-return
         self[name] = attempt
+
+        # Verify we have a reachable host name. Fail early
+        # if we don't.
+        # TODO: Direct this through a utility that can cache
+        # and also be replaced easily at runtime for testing.
+        try:
+            socket.getaddrinfo(self.netloc, None)
+        except socket.error as ex:
+            attempt.status = 'failed'
+            attempt.message = str(ex)
+
+        return attempt
 
 
 class PersistentSubscription(Subscription, Persistent):
     """
     Persistent implementation of `IWebhookSubscription`
     """
+
+    def _new_deliveryAttempt(self):
+        return PersistentWebhookDeliveryAttempt()
 
 
 class GlobalSubscriptionComponents(BaseGlobalComponents):

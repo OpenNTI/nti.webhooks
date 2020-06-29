@@ -13,6 +13,7 @@ from zope.interface.interfaces import IInterface
 from zope.interface.interfaces import IObjectEvent
 
 from zope.container.interfaces import IContainerNamesContainer
+from zope.container.interfaces import IContained
 from zope.container.constraints import contains
 from zope.container.constraints import containers
 
@@ -97,7 +98,7 @@ class IWebhookDialect(Interface):
         externalizer named "webhook-delivery".
         """
 
-class IWebhookDeliveryAttempt(ILastModified):
+class IWebhookDeliveryAttempt(IContained, ILastModified):
     containers('.IWebhookSubscription')
 
     # XXX: Need to store the outgoing request, including
@@ -117,13 +118,21 @@ class IWebhookDeliveryAttempt(ILastModified):
         """,
         values=(
             'pending', 'successful', 'failed',
-        )
+        ),
+        required=True,
+        default='pending',
     )
 
     message = Text(
         title=u"Additional explanatory text.",
         required=False,
     )
+
+    payload_data = Text(
+        title=u"The external data sent to the destination.",
+        required=True,
+    )
+
 
 class IWebhookSubscription(IContainerNamesContainer):
     """
@@ -214,6 +223,7 @@ class IWebhookSubscription(IContainerNamesContainer):
     )
 
     netloc = Attribute("The network host name portion of the URL.")
+    dialect = Attribute("The resolved dialect to use for this subscription.")
 
     def isApplicable(data):
         """
@@ -225,12 +235,15 @@ class IWebhookSubscription(IContainerNamesContainer):
         declared for the subscription as well as the type/interface.
         """
 
-    def addDeliveryAttempt(attempt):
+    def createDeliveryAttempt(payload_data):
         """
-        Store a `IWebhookDeliveryAttempt` for this subscription.
+        Create a new `IWebhookDeliveryAttempt` for this subscription.
+
+        The delivery attempt is in the pending status, and is stored as
+        a child of this subscription; its ``__parent__`` is set to this subscription.
 
         Subscriptions may be limited in the amount of attempts they will store;
-        this method may cause older attempts to be abandoned.
+        this method may cause that size to temporarily be exceeded
         """
 
 

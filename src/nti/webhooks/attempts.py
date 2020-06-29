@@ -12,6 +12,7 @@ import time
 from persistent import Persistent
 from zope.interface import implementer
 from zope.schema.fieldproperty import createFieldProperties
+from zope.container.contained import Contained
 
 from nti.externalization.representation import WithRepr
 from nti.schema.fieldproperty import createDirectFieldProperties
@@ -22,7 +23,7 @@ from nti.webhooks.interfaces import IWebhookDeliveryAttempt
 
 @WithRepr
 @implementer(IWebhookDeliveryAttempt)
-class WebhookDeliveryAttempt(SchemaConfigured):
+class WebhookDeliveryAttempt(SchemaConfigured, Contained):
     createFieldProperties(IWebhookDeliveryAttempt)
 
     def __init__(self, **kwargs):

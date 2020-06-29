@@ -12,10 +12,12 @@ from __future__ import print_function
 
 import functools
 import socket
+from collections import defaultdict
 
 from zope import component
 
 from zope.interface import implementer
+from zope.cachedescriptors.property import Lazy
 from transaction.interfaces import IDataManager
 
 from nti.webhooks import MessageFactory as _
@@ -31,13 +33,56 @@ def foreign_transaction(func):
 
     return dec
 
+class _DataManagerState(object):
+    """
+    Helper to hold intermediate data for the data manager.
+    """
+
+    #: A list of ``(data, subscription)`` tuples. The event that caused the data to be
+    #: registered is discarded.
+    all_subscriptions = None
+
+    #: A dictionary of ``{data: {dialect: external_form}}``.
+    _data_to_ext_dialect = None
+
+    #: A dictionary of subscription to list of delivery attempts.
+    subscription_to_delivery_attempt = None
+
+    def __init__(self, subscription_dict):
+        all_subscriptions = defaultdict(set)
+        data_to_dialects = self._data_to_ext_dialect = defaultdict(dict)
+        for (data, _event), subscriptions in subscription_dict.items():
+            all_subscriptions[data].update(subscriptions)
+            data_to_dialects[data].update({sub.dialect: None for sub in subscriptions})
+
+        self.all_subscriptions = [
+            (data, sub)
+            for data, subscriptions in all_subscriptions.items()
+            for sub in subscriptions
+        ]
+
+        sub_to_payload = self.subscription_to_payloads = defaultdict(list)
+        for data, sub in self.all_subscriptions:
+            sub_to_payload[sub].append(self._ext_data(data, sub))
+
+        self.subscription_to_delivery_attempt = defaultdict(list)
+
+    def _ext_data(self, data, subscription):
+        dialect = subscription.dialect
+        result = self._data_to_ext_dialect[data][dialect]
+        if result is None:
+            result = self._data_to_ext_dialect[data][dialect] = dialect.externalizeData(data)
+        return result
+
+
+
 @implementer(IDataManager)
 class WebhookDataManager(object):
 
     transaction = None
-    _voted_data = None
+    _tpc_state = None
 
-    def __init__(self, transaction_manager, data, event, subscriptions):
+    def __init__(self, transaction_manager, data=None, event=None, subscriptions=()):
         """
         :param transaction_manager: The current ``ITransactionManager`` we are joining.
         :param subscriptions: A sequence of ``IWebhookSubscription`` objects to
@@ -47,7 +92,11 @@ class WebhookDataManager(object):
            once they are joined to the transaction, they will be delivered.
         """
         self.transaction_manager = transaction_manager
-        self._subscriptions = {(data, event): list(subscriptions)}
+        self._subscriptions = defaultdict(set)
+        self._tpc_state = None
+        self.transaction = None
+        if data is not None and event is not None:
+            self.add_subscriptions(data, event, subscriptions)
 
     def add_subscriptions(self, data, event, subscriptions):
         """
@@ -59,98 +108,72 @@ class WebhookDataManager(object):
         object, when and how to coalesce them. For example, given ObjectCreated and ObjectAdded
         events, we probably only want to broadcast one of them. This may be dialect specific?
         Or part of the subscription registration? A priority or 'supercedes' or something?
-        For now, we just count on people not registering events that way.
+        For now, we just wind up discarding the event type and assume it's not important to the
+        delivery.
         """
         if self.transaction:
             raise ValueError("Already in transaction")
-        try:
-            self._subscriptions[(data, event)].extend(subscriptions)
-        except KeyError:
-            self._subscriptions[(data, event)] = list(subscriptions)
+        self._subscriptions[(data, event)].update(subscriptions)
 
+
+    # The sequence for two-phase-commit is
+    # tpc_begin/commit/vote/finish (or abort). ZODB serializes objects
+    # and sends them to the storage during ``commit()``; committing is
+    # allowed to create new objects and register them with the
+    # connection. ``vote()`` is used for conflict resolution. Because
+    # predicting sortKeys and the order of resources is hard, we need
+    # to make any modifications during ``tpc_begin()`` (*or* work with
+    # objects to have them do things during their ``__getstate__()`` or
+    # other pickle methods that add new objects to the connection
+    # during object writing at ``commit()` --- but that's pretty untenable).
+    # This means that we need to add our attempts, and serialize all data, which
+    # is recorded as part of the attempt, at ``tpc_begin()`` time.
 
     @foreign_transaction
     def tpc_begin(self, transaction):
         self.transaction = transaction
+        self._tpc_state = state = _DataManagerState(self._subscriptions)
+        for subscription, payloads in state.subscription_to_payloads.items():
+            state.subscription_to_delivery_attempt[subscription].extend([
+                subscription.createDeliveryAttempt(payload)
+                for payload in payloads
+            ])
+
+    @foreign_transaction
+    def commit(self, transaction):
+        # Nothing to do here; the necessary storage bits will happen automatically.
+        pass
 
     @foreign_transaction
     def tpc_vote(self, transaction):
-        # Be sure we can find all the dialects.
-        # Note that dialects may mean different things to different subscriptions.
-        all_subscriptions = []
-        for v in self._subscriptions.values():
-            all_subscriptions.extend(v)
-
-        dialects = {
-            sub: component.getUtility(IWebhookDialect, sub.dialect_id or u'', sub)
-            for sub in all_subscriptions
-        }
-        # Be sure we can find host names.
-        hosts = {sub.netloc for sub in all_subscriptions}
-        broken_hosts = set()
-        for host in hosts:
-            # TODO: gevent paralleize these?
-            try:
-                socket.getaddrinfo(host, None)
-            except socket.error:
-                broken_hosts.add(host)
-
-        # Be sure we can serialize the data for each (distinct) dialect.
-        serialized_data_by_dialect = {} # (dialect, data) -> data string
-        serialized_data_by_sub = [] # (subscription, dialect, serialized_data)
-        for (data, _event), subscriptions in self._subscriptions.items():
-            for sub in subscriptions:
-                if sub.netloc in broken_hosts:
-                    # Record a broken delivery
-                    sub.addDeliveryAttempt(
-                        PersistentWebhookDeliveryAttempt(status='failed',
-                                                         message=_(u"Failed to resolve hostname")))
-                    continue
-                dialect = dialects[sub]
-                key = (dialect, data)
-                try:
-                    ext_data = serialized_data_by_dialect[key]
-                except KeyError:
-                    # TODO: What if externalizing depends on who is getting the data?
-                    # (Which I think it may; the current user sometimes comes into play)
-                    # Do we need to switch out the current user? What about the pyramid request?
-                    ext_data = serialized_data_by_dialect[key] = dialect.externalizeData(data)
-
-                serialized_data_by_sub.append((sub, dialect, ext_data))
-
-        # Now, unify the URLs. For each URL in a subscription, collect the
-        # distinct set of data to send. This is per-dialect.
-        all_data = {} # (url, dialect) -> ext_data
-        for subscription, dialect, ext_data in serialized_data_by_sub:
-            key = (subscription.to, dialect)
-            if key not in all_data:
-                all_data[key] = ext_data
-            else:
-                # TODO: This requires deterministic output from the seriaizer,
-                # such as sorting keys.
-                assert all_data[key] == ext_data
-
-        # XXX: Record pending deliveries for all these subscriptions.
-        # XXX: Because we're writing data here, maybe we need to happen earlier?
-        # Or maybe this needs to happen in a hook? Concerned about making it properly
-        # visible to ZODB connections.
-        self._voted_data = all_data
+        # We have nothing to vote on. If we got this far in tpc_begin without an error,
+        # all the dialects were found and all the delivery attempts recorder (they will be
+        # persisted too, if needed). Delivery can't stop now.
+        pass
 
     @foreign_transaction
     def tpc_finish(self, transaction):
+        # Make the changes actually visible. This should never fail
+        # or raise an exception.
+
+        # What we want to do here is publish our `_tpc_state` to a global utility that's
+        # responsible for actually making the webhook calls, and storing the results.
+        # We need to find the persistent objects that are the delivery attempts and
+        # only find them by OID when we are next in a Connection; as of now, they're no
+        # good to us.
         pass
 
     @foreign_transaction
     def tpc_abort(self, transaction):
-        pass
+        # Called if some part of TPC failed.
+        # XXX: For the non-persistent managers, we need to remove the
+        # delivery attempt, because it never happened and we don't want to clog
+        # up their limit on attempts.
+        self.abort(transaction)
 
     def abort(self, tranasction):
-        self.transaction = None
-        self._subscriptions = None
+        self.__init__(self.transaction_manager)
 
-    @foreign_transaction
-    def commit(self, transaction):
-        pass
 
     def sortKey(self):
         return 'nti.webhooks.datamanager.WebhookDataManager'
