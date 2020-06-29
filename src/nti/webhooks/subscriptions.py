@@ -48,6 +48,8 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     to = u''
     createDirectFieldProperties(IWebhookSubscription)
 
+    MAXIMUM_LENGTH = 50
+
     def __init__(self, **kwargs):
         SchemaConfigured.__init__(self, **kwargs)
         _CheckObjectOnSetBTreeContainer.__init__(self)
@@ -77,6 +79,14 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         """
         return urlsplit(self.to).netloc
 
+    def addDeliveryAttempt(self, attempt):
+        while len(self) > self.MAXIMUM_LENGTH:
+            del self[self._SampleContainer__data.minKey()]
+
+        name = INameChooser(self).chooseName('', attempt) # pylint:disable=too-many-function-args,assignment-from-no-return
+        self[name] = attempt
+
+
 class PersistentSubscription(Subscription, Persistent):
     """
     Persistent implementation of `IWebhookSubscription`
@@ -104,7 +114,7 @@ class GlobalWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
 
     def addSubscription(self, subscription):
         name_chooser = INameChooser(self)
-        name = name_chooser.chooseName('', subscription) # too-many-function-args,assignment-from-no-return
+        name = name_chooser.chooseName('', subscription) # pylint:disable=too-many-function-args,assignment-from-no-return
         self[name] = subscription
 
         self.registry.registerHandler(subscription, (subscription.for_, subscription.when),

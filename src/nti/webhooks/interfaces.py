@@ -23,6 +23,7 @@ from zope.principalregistry.metadirectives import TextId
 from zope.schema import Field
 
 from nti.schema.field import Object
+from nti.schema.field import ValidText as Text
 from nti.schema.field import ValidChoice as Choice
 
 from nti.webhooks._schema import HTTPSURL
@@ -36,6 +37,31 @@ __all__ = [
     'IWebhookSubscription',
     'IWebhookSubscriptionManager',
 ]
+
+try:
+    from nti.base.interfaces import ICreatedTime
+except ImportError:
+    from zope.schema import Real as Number # pylint:disable=ungrouped-imports
+    class ICreatedTime(Interface):
+        """
+        Something that (immutably) tracks its created time.
+        """
+
+        createdTime = Number(title=u"The timestamp at which this object was created.",
+                             description=u"Typically set automatically by the object.",
+                             default=0.0)
+
+
+    class ILastModified(ICreatedTime):
+        """
+        Something that tracks a modification timestamp.
+        """
+
+        lastModified = Number(title=u"The timestamp at which this object or its contents was last modified.",
+                              default=0.0)
+else:
+    from nti.base.interfaces import ILastModified
+
 
 class IWebhookDeliveryManager(Interface):
     """
@@ -71,14 +97,37 @@ class IWebhookDialect(Interface):
         externalizer named "webhook-delivery".
         """
 
-class IWebhookDeliveryAttempt(Interface):
+class IWebhookDeliveryAttempt(ILastModified):
     containers('.IWebhookSubscription')
+
+    # XXX: Need to store the outgoing request, including
+    # headers (authentication headers?) and method, as well as
+    # the response, including headers. Timestamps are good too.
+    # Resolved host addresses would be good too, although in a round-robin DNS
+    # we don't necessarily know what one we used. Can requests tell us that?
+    # what about urllib3?
+
+    status = Choice(
+        title=u"The status of the delivery attempt.",
+        description=u"""
+        The current status of the delivery attempt.
+
+        Attempts begin in the 'pending' state, and then transition
+        to either the 'successful', or 'failed' state.
+        """,
+        values=(
+            'pending', 'successful', 'failed',
+        )
+    )
+
+    message = Text(
+        title=u"Additional explanatory text.",
+        required=False,
+    )
 
 class IWebhookSubscription(IContainerNamesContainer):
     """
     An individual subscription.
-
-    XXX: This is probably a container for the delivery items.
     """
     containers('.IWebhookSubscriptionManager')
     contains('.IWebhookDeliveryAttempt')
@@ -174,6 +223,14 @@ class IWebhookSubscription(IContainerNamesContainer):
         This does not take into account whether this subscription is
         active or not, but does take into account the permission and principal
         declared for the subscription as well as the type/interface.
+        """
+
+    def addDeliveryAttempt(attempt):
+        """
+        Store a `IWebhookDeliveryAttempt` for this subscription.
+
+        Subscriptions may be limited in the amount of attempts they will store;
+        this method may cause older attempts to be abandoned.
         """
 
 

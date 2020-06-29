@@ -80,8 +80,8 @@ If we specify a permission to check, it must exist.
 .. doctest::
    :hide:
 
-   from zope.testing import cleanup
-   cleanup.cleanUp()
+   >>> from zope.testing import cleanup
+   >>> cleanup.cleanUp()
 
 
 The above (successful) registration will try to send *all* ``IObjectEvent`` events
@@ -118,6 +118,8 @@ Now that we have that in place, let's verify that it exists:
    >>> from nti.webhooks.interfaces import IWebhookSubscriptionManager
    >>> from zope import component
    >>> sub_manager = component.getUtility(IWebhookSubscriptionManager)
+   >>> len(list(sub_manager))
+   1
    >>> list(sub_manager.items())
    [('Subscription', <...Subscription ... {'to': 'https://this_domain_does_not_exist', 'for_': <InterfaceClass ...IContentContainer>, 'when': <InterfaceClass ...IObjectCreatedEvent>...
 
@@ -181,8 +183,10 @@ But it does record a failed attempt in the subscription:
 .. doctest::
 
    >>> subscription = sub_manager['Subscription']
+   >>> len(subscription)
+   1
    >>> list(subscription.values())
-   [<...FailedDeliveryAttempt...>]
+   [<...WebhookDeliveryAttempt...'status': 'failed'...>]
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
 

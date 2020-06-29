@@ -14,10 +14,13 @@ import functools
 import socket
 
 from zope import component
+
 from zope.interface import implementer
 from transaction.interfaces import IDataManager
 
+from nti.webhooks import MessageFactory as _
 from nti.webhooks.interfaces import IWebhookDialect
+from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
 
 def foreign_transaction(func):
     @functools.wraps(func)
@@ -98,7 +101,10 @@ class WebhookDataManager(object):
         for (data, _event), subscriptions in self._subscriptions.items():
             for sub in subscriptions:
                 if sub.netloc in broken_hosts:
-                    # XXX: Record a broken delivery
+                    # Record a broken delivery
+                    sub.addDeliveryAttempt(
+                        PersistentWebhookDeliveryAttempt(status='failed',
+                                                         message=_(u"Failed to resolve hostname")))
                     continue
                 dialect = dialects[sub]
                 key = (dialect, data)
