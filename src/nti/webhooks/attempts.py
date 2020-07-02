@@ -14,22 +14,28 @@ from zope.interface import implementer
 from zope.schema.fieldproperty import createFieldProperties
 from zope.container.contained import Contained
 
-from nti.externalization.representation import WithRepr
-from nti.schema.fieldproperty import createDirectFieldProperties
 from nti.schema.schema import SchemaConfigured
 
 from nti.webhooks.interfaces import IWebhookDeliveryAttempt
 
 
-@WithRepr
 @implementer(IWebhookDeliveryAttempt)
 class WebhookDeliveryAttempt(SchemaConfigured, Contained):
+    status = None
     createFieldProperties(IWebhookDeliveryAttempt)
 
     def __init__(self, **kwargs):
         self.createdTime = self.lastModified = time.time()
         SchemaConfigured.__init__(self, **kwargs)
 
+    def __repr__(self):
+        return "<%s.%s at 0x%x status=%r>" % (
+            self.__class__.__module__,
+            self.__class__.__name__,
+            id(self),
+            self.status,
+        )
 
 class PersistentWebhookDeliveryAttempt(WebhookDeliveryAttempt, Persistent):
+    # XXX: _p_repr
     pass

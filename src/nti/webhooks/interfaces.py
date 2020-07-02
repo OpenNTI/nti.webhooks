@@ -58,8 +58,9 @@ except ImportError:
         Something that tracks a modification timestamp.
         """
 
-        lastModified = Number(title=u"The timestamp at which this object or its contents was last modified.",
-                              default=0.0)
+        lastModified = Number(
+            title=u"The timestamp at which this object or its contents was last modified.",
+            default=0.0)
 else:
     from nti.base.interfaces import ILastModified
 
@@ -68,9 +69,87 @@ class IWebhookDeliveryManager(Interface):
     """
     Handles the delivery of messages.
 
-    This is usually a global utility registered by the
-    ZCML of this package.
+    This is a global utility registered by the ZCML of this package.
+
+    It operates in fire-and-forget mode, in a completely opaque
+    fashion. However, this is a two-step process to better work with
+    persistent objects and transactions. In the first step, a
+    :class:`IWebhookDeliveryManagerShipmentInfo` is created with
+    :meth:`createShipmentInfo`, packaging up all the information
+    needed to *later* begin the delivery using
+    :meth:`acceptForDelivery`.
+
+    (And yes, the terminology is based on the United States Postal
+    Service.)
     """
+
+    def createShipmentInfo(subscriptions_and_attempts):
+        """
+        Given an (distinct) iterable of ``(subscription, attempt)`` pairs,
+        extract the information needed to later send that data
+        *as well as record its status in the subscription*, independently of
+        any currently running transaction or request.
+
+        Each *attempt* must be pending and must not be contained in any other
+        shipment info.
+
+        For persistent subscriptions and attempts, all necessary information to complete
+        :meth:`acceptForDelivery` must be captured at this time.
+
+        :return: A new :class:`IWebhookDeliveryManagerShipmentInfo` object.
+            If the iterable is empty, this may return None or a suitable
+            object that causes :meth:`acceptForDelivery` to behave appropriately.
+        """
+
+    def acceptForDelivery(shipment_info):
+        """
+        Given a :class:`IWebhookDeliveryManagerShipmentInfo` previously created
+        by this object but not yet accepted for delivery, schedule the delivery
+        and begin making it happen.
+
+        This is generally an asynchronous call and SHOULD NOT raise exceptions; the
+        caller is likely unable to deal with them.
+
+        As delivery completes, the status of each attempt contained in the shipment info
+        should be updated.
+
+        No return value.
+        """
+
+class IWebhookDeliveryManagerShipmentInfo(Interface):
+    """
+    A largely-opaque interface representing values returned from,
+    and passed to, a particular :class:`IWebhookDeliveryManager`.
+    """
+
+
+class IWebhookDestinationValidator(Interface):
+    """
+    Validates destinations.
+
+    This is the place where we make sure that the destination
+    is valid, before attempting to deliver to it, according
+    to policy. This may include such things as:
+
+    - Check that the protocol is HTTPs.
+    - Verify that the domain is reachable, or at least
+      resolvable.
+    - Ensure query parameters are innocuous
+
+    Targets are validated before attempting to send data to them.
+
+    This is registered as a single global utility. The utility is
+    encouraged to cache valid/invalid results for a period of time,
+    especially with domain resolvability.
+    """
+
+    def validateTarget(target_url):
+        """
+        Check that the URL is valid. If it is, return silently.
+
+        If it is not, raise some sort of exception such as a
+        :exc:`socket.error` for unresolvable domains.
+        """
 
 
 class IWebhookPayload(Interface):

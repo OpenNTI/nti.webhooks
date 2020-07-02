@@ -7,11 +7,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import socket
-try:
-    from urllib.parse import urlsplit
-except ImportError: # Py2
-    from urlparse import urlsplit
 
 from zope import component
 from zope.interface import implementer
@@ -22,13 +17,13 @@ from zope.container.btree import BTreeContainer
 from zope.container.constraints import checkObject
 from zope.cachedescriptors.property import CachedProperty
 
-from nti.externalization.representation import WithRepr
 from nti.schema.fieldproperty import createDirectFieldProperties
 from nti.schema.schema import SchemaConfigured
 
 from nti.webhooks.interfaces import IWebhookDialect
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
+from nti.webhooks.interfaces import IWebhookDestinationValidator
 from nti.webhooks.attempts import WebhookDeliveryAttempt
 from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
 
@@ -43,13 +38,12 @@ class _CheckObjectOnSetBTreeContainer(BTreeContainer):
         super(_CheckObjectOnSetBTreeContainer, self)._setitemf(key, value)
 
 
-@WithRepr
 @implementer(IWebhookSubscription)
 class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     """
     Default, non-persistent implementation of `IWebhookSubscription`.
     """
-    for_ = permission_id = owner_id = None
+    for_ = permission_id = owner_id = dialect_id = when = None
     to = u''
     createDirectFieldProperties(IWebhookSubscription)
 
@@ -83,13 +77,6 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         # as the context to find the enclosing site manager.
         return component.getUtility(IWebhookDialect, self.dialect_id or u'', self)
 
-    @CachedProperty('to')
-    def netloc(self):
-        """
-        The host name of the ``to`` address.
-        """
-        return urlsplit(self.to).netloc
-
     def _new_deliveryAttempt(self):
         return WebhookDeliveryAttempt()
 
@@ -99,18 +86,26 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         name = INameChooser(self).chooseName('', attempt) # pylint:disable=too-many-function-args,assignment-from-no-return
         self[name] = attempt
 
-        # Verify we have a reachable host name. Fail early
-        # if we don't.
-        # TODO: Direct this through a utility that can cache
-        # and also be replaced easily at runtime for testing.
+        # Verify the destination. Fail early
+        # if it doesn't pass.
+        validator = component.getUtility(IWebhookDestinationValidator, u'', self)
         try:
-            socket.getaddrinfo(self.netloc, None)
-        except socket.error as ex:
+            validator.validateTarget(self.to)
+        except Exception as ex: # pylint:disable=broad-except
             attempt.status = 'failed'
             attempt.message = str(ex)
 
         return attempt
 
+    def __repr__(self):
+        return "<%s.%s at 0x%x to=%r for=%s when=%s>" % (
+            self.__class__.__module__,
+            self.__class__.__name__,
+            id(self),
+            self.to,
+            self.for_.__name__,
+            self.when.__name__
+        )
 
 class PersistentSubscription(Subscription, Persistent):
     """
@@ -120,6 +115,7 @@ class PersistentSubscription(Subscription, Persistent):
     def _new_deliveryAttempt(self):
         return PersistentWebhookDeliveryAttempt()
 
+    # XXX: _p_repr.
 
 class GlobalSubscriptionComponents(BaseGlobalComponents):
     """

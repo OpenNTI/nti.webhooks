@@ -84,8 +84,9 @@ If we specify a permission to check, it must exist.
    >>> cleanup.cleanUp()
 
 
-The above (successful) registration will try to send *all* ``IObjectEvent`` events
-for all objects that implement :class:`~nti.webhooks.interfaces.IWebhookPayload` to
+The above (unsuccessful) registration would have tried to send *all*
+``IObjectEvent`` events for all objects that implement
+:class:`~nti.webhooks.interfaces.IWebhookPayload` to
 ``https://example.com`` using the default dialect. That's unlikely to
 be what you want, outside of tests. Instead, you'll want to limit the
 event to particular kinds of objects, and particular events in their
@@ -121,7 +122,7 @@ Now that we have that in place, let's verify that it exists:
    >>> len(list(sub_manager))
    1
    >>> list(sub_manager.items())
-   [('Subscription', <...Subscription ... {'to': 'https://this_domain_does_not_exist', 'for_': <InterfaceClass ...IContentContainer>, 'when': <InterfaceClass ...IObjectCreatedEvent>...
+   [('Subscription', <...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>)]
 
 And we'll verify that it is :term:`active`, by looking for it using
 the event we just declared:
@@ -135,7 +136,7 @@ the event we just declared:
    >>> len(find_active_subscriptions_for(event.object, event))
    1
    >>> find_active_subscriptions_for(event.object, event)
-   [<...Subscription ... {'to': 'https://this_domain_does_not_exist', 'for_': <InterfaceClass ...IContentContainer>, 'when': <InterfaceClass ...IObjectCreatedEvent>...
+   [<...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>]
 
 
 Next, we need to know if the subscription is :term:`applicable` to the
@@ -185,11 +186,47 @@ But it does record a failed attempt in the subscription:
    >>> subscription = sub_manager['Subscription']
    >>> len(subscription)
    1
-   >>> list(subscription.values())
-   [<...WebhookDeliveryAttempt...'status': 'failed'...>]
+   >>> attempt = list(subscription.values())[0]
+   >>> attempt.status
+   'failed'
+   >>> attempt.message
+   '[Errno 8] nodename nor servname provided, or not known'
+
 
 
 Let's reset things and look at what a successful delivery might look like.
+
+.. doctest::
+
+   >>> from zope.testing import cleanup
+   >>> cleanup.cleanUp()
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="zope.component" />
+   ...   <include package="zope.container" />
+   ...   <include package="nti.webhooks" />
+   ...   <webhooks:staticSubscription
+   ...             to="https://example.com/some/path"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent" />
+   ... </configure>
+   ... """)
+   >>> subscription = sub_manager['Subscription']
+   >>> len(subscription)
+   0
+
+As before, we configure the package (this time with a resolvable URL)
+and get the subscription object, confirming that it has no history.
+
+.. doctest::
+
+   >>> _ = transaction.begin()
+   >>> lifecycleevent.created(Folder())
+   >>> transaction.commit()
+
 
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry

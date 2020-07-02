@@ -24,11 +24,18 @@
     <!-- Basic externalization support -->
     <include package="nti.externalization" />
 
-
     <!-- The global subscription manager -->
     <utility component=".subscriptions.global_subscription_manager"
              provides=".interfaces.IWebhookSubscriptionManager" />
 
+    <!-- The default validator -->
+    <utility factory=".destination_validator.DefaultDestinationValidator" />
+
+    <!-- The default delivery manager -->
+    <utility factory=".delivery_manager.DefaultDeliveryManager" />
+
+    <!-- The default dialect -->
+    <utility factory=".dialect.DefaultWebhookDialect" />
 
     <!-- Global event dispatcher -->
     <subscriber
@@ -38,6 +45,4 @@
         />
 
 
-    <!-- The default dialect -->
-    <utility factory=".dialect.DefaultWebhookDialect" />
 </configure>

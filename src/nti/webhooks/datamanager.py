@@ -11,18 +11,13 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
-import socket
 from collections import defaultdict
 
 from zope import component
-
 from zope.interface import implementer
-from zope.cachedescriptors.property import Lazy
 from transaction.interfaces import IDataManager
 
-from nti.webhooks import MessageFactory as _
-from nti.webhooks.interfaces import IWebhookDialect
-from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
+from nti.webhooks.interfaces import IWebhookDeliveryManager
 
 def foreign_transaction(func):
     @functools.wraps(func)
@@ -46,7 +41,12 @@ class _DataManagerState(object):
     _data_to_ext_dialect = None
 
     #: A dictionary of subscription to list of delivery attempts.
+    #: This has to be a list because a single subscription may fire
+    #: for many events during a single transaction.
     subscription_to_delivery_attempt = None
+
+    #: The ``IWebhookDeliveryManagerShipmentInfo`` object, once created.
+    shipment_info = None
 
     def __init__(self, subscription_dict):
         all_subscriptions = defaultdict(set)
@@ -149,7 +149,20 @@ class WebhookDataManager(object):
         # We have nothing to vote on. If we got this far in tpc_begin without an error,
         # all the dialects were found and all the delivery attempts recorder (they will be
         # persisted too, if needed). Delivery can't stop now.
-        pass
+        #
+        # The main thing we need to do is extract information from the persistent objects
+        # so that the delivery manager doesn't have to. It's not safe to do so from
+        # tpc_finish or later.
+        delivery_man = component.getUtility(IWebhookDeliveryManager)
+        self._tpc_state.shipment_info = delivery_man.createShipmentInfo(
+            # Flatten the subscription/delivery attempt objects
+            [(subscription, attempt)
+             for subscription, attempts
+             in self._tpc_state.subscription_to_delivery_attempt.items()
+             for attempt in attempts
+             if attempt.status == 'pending'
+            ]
+        )
 
     @foreign_transaction
     def tpc_finish(self, transaction):
@@ -161,7 +174,9 @@ class WebhookDataManager(object):
         # We need to find the persistent objects that are the delivery attempts and
         # only find them by OID when we are next in a Connection; as of now, they're no
         # good to us.
-        pass
+        delivery_man = component.getUtility(IWebhookDeliveryManager)
+        delivery_man.acceptForDelivery(self._tpc_state.shipment_info)
+        self._tpc_state = None
 
     @foreign_transaction
     def tpc_abort(self, transaction):
@@ -173,7 +188,6 @@ class WebhookDataManager(object):
 
     def abort(self, tranasction):
         self.__init__(self.transaction_manager)
-
 
     def sortKey(self):
         return 'nti.webhooks.datamanager.WebhookDataManager'
