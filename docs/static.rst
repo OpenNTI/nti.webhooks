@@ -219,7 +219,25 @@ Let's reset things and look at what a successful delivery might look like.
    0
 
 As before, we configure the package (this time with a resolvable URL)
-and get the subscription object, confirming that it has no history.
+and get the subscription object, confirming that it has no history. To
+avoid actually trying to talk to example.com, we'll install some mocks
+(this will be hidden from the rendered documentation because it's an
+implementation detail).
+
+.. doctest::
+   :hide:
+
+   >>> import responses
+   >>> import contextlib
+   >>> @contextlib.contextmanager
+   ... def using_mocks():
+   ...   with responses.RequestsMock() as mock:
+   ...       mock.add(responses.POST, 'https://example.com/some/path', status=200)
+   ...       yield
+   >>> mock_network = using_mocks()
+   >>> mock_network.__enter__()
+
+Now we will create the object and send the hook.
 
 .. doctest::
 
@@ -227,6 +245,29 @@ and get the subscription object, confirming that it has no history.
    >>> lifecycleevent.created(Folder())
    >>> transaction.commit()
 
+In the background, the ``IWebhookDeliveryManager`` is busy invoking the hook. We need to wait for it to
+finish, and then we can examine our delivery attempt:
+
+.. doctest::
+
+   >>> from zope import component
+   >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
+   >>> component.getUtility(IWebhookDeliveryManager).waitForPendingDeliveries()
+
+.. doctest::
+   :hide:
+
+   >>> _ = mock_network.__exit__(None, None, None)
+
+.. doctest::
+
+   >>> len(subscription)
+   1
+   >>> attempt = list(subscription.values())[0]
+   >>> attempt.status
+   'successful'
+   >>> attempt.message
+   '200 OK'
 
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
