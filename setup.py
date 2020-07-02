@@ -14,6 +14,8 @@ TESTS_REQUIRE = [
     'nti.testing',
     'zope.testrunner',
     'zope.lifecycleevent',
+    # Easy mocking of ``requests``.
+    'responses',
 ]
 
 def _read(fname):
@@ -61,7 +63,7 @@ setup(
         'zope.componentvocabulary',
         'zope.vocabularyregistry',
         'zope.site',
-        'nti.externalization >= 1.1.3',
+        'nti.externalization >= 2.0.0', # Consistent interface resolution order
         'nti.schema',
         'setuptools',
         'transaction',

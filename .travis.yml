@@ -11,8 +11,7 @@ script:
 env:
   global:
     - PYTHONHASHSEED=1042466059
-    # Not yet. https://github.com/NextThought/nti.externalization/pull/108
-    # - ZOPE_INTERFACE_STRICT_IRO=1
+    - ZOPE_INTERFACE_STRICT_IRO=1
 
 after_success:
   - coveralls

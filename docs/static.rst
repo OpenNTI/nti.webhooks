@@ -188,8 +188,11 @@ But it does record a failed attempt in the subscription:
    >>> list(subscription.values())
    [<...WebhookDeliveryAttempt...'status': 'failed'...>]
 
-.. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
 
+Let's reset things and look at what a successful delivery might look like.
+
+
+.. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
 
 
 .. testcleanup::
