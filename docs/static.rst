@@ -145,6 +145,8 @@ the event we just declared:
 Next, we need to know if the subscription is :term:`applicable` to the
 data. Since we didn't specify a permission or a principal to check, the subscription is applicable:
 
+.. seealso:: :doc:`security` for information on security checks.
+
 .. doctest::
 
    >>> subscriptions = find_active_subscriptions_for(event.object, event)
