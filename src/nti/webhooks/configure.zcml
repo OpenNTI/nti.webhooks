@@ -32,7 +32,7 @@
     <utility factory=".destination_validator.DefaultDestinationValidator" />
 
     <!-- The default delivery manager -->
-    <utility factory=".delivery_manager.DefaultDeliveryManager" />
+    <utility factory=".delivery_manager.getGlobalDeliveryManager" />
 
     <!-- The default dialect -->
     <utility factory=".dialect.DefaultWebhookDialect" />

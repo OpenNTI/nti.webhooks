@@ -55,6 +55,9 @@ setup(
     package_dir={'': 'src'},
     namespace_packages=['nti'],
     install_requires=[
+        # backport of concurrent.futures; implements the 3.7
+        # interface.
+        'futures; python_version == "2.7"',
         'zope.authentication', # IAuthentication
         'zope.interface >= 5.1',
         'zope.container',
