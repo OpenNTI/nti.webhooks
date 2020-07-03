@@ -22,6 +22,7 @@ from zope.componentvocabulary.vocabulary import UtilityNames
 from zope.principalregistry.metadirectives import TextId
 
 from zope.schema import Field
+from zope.schema import NativeString
 
 from nti.schema.field import Object
 from nti.schema.field import ValidText as Text
@@ -207,7 +208,9 @@ class IWebhookDeliveryAttempt(IContained, ILastModified):
         required=False,
     )
 
-    payload_data = Text(
+    payload_data = NativeString(
+        # XXX: Think this through. Should it always be bytes? Displaying
+        # in the web interface gets more complicated that way...
         title=u"The external data sent to the destination.",
         required=True,
     )

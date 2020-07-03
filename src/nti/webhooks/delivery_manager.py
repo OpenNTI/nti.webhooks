@@ -34,7 +34,7 @@ class _TrivialShipmentInfo(ShipmentInfo):
             # XXX: Store the full response status, data (to some limit) and headers.
             # We don't want to pickle the Response object to avoid depending on internal
             # details, we need to extract it.
-            attempt.message = '%s %s' % (response.status_code, response.reason)
+            attempt.message = u'%s %s' % (response.status_code, response.reason)
 
 @interface.implementer(IWebhookDeliveryManager)
 class DefaultDeliveryManager(Contained):

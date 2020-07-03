@@ -93,7 +93,12 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             validator.validateTarget(self.to)
         except Exception as ex: # pylint:disable=broad-except
             attempt.status = 'failed'
-            attempt.message = str(ex)
+            # The exception value can vary; it's not intended to be presented to end
+            # users as-is
+            # XXX: For internal verification, we need some place to store it.
+            attempt.message = (
+                u'Verification of the destination URL failed. Please check the domain.'
+            )
 
         return attempt
 

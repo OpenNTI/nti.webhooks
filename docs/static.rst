@@ -121,8 +121,11 @@ Now that we have that in place, let's verify that it exists:
    >>> sub_manager = component.getUtility(IWebhookSubscriptionManager)
    >>> len(list(sub_manager))
    1
-   >>> list(sub_manager.items())
-   [('Subscription', <...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>)]
+   >>> items = list(sub_manager.items())
+   >>> print(items[0][0])
+   Subscription
+   >>> items[0][1]
+   <...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>
 
 And we'll verify that it is :term:`active`, by looking for it using
 the event we just declared:
@@ -189,8 +192,8 @@ But it does record a failed attempt in the subscription:
    >>> attempt = list(subscription.values())[0]
    >>> attempt.status
    'failed'
-   >>> attempt.message
-   '[Errno 8] nodename nor servname provided, or not known'
+   >>> print(attempt.message)
+   Verification of the destination URL failed. Please check the domain.
 
 
 
@@ -266,8 +269,8 @@ finish, and then we can examine our delivery attempt:
    >>> attempt = list(subscription.values())[0]
    >>> attempt.status
    'successful'
-   >>> attempt.message
-   '200 OK'
+   >>> print(attempt.message)
+   200 OK
 
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
