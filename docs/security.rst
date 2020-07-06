@@ -66,9 +66,11 @@ Example
 Lets put these pieces together and check how security applies.
 
 We'll begin by defining the same subscription we used :doc:`previously
-<static>`, but we'll add a permission and an owner. We'll use
+<static>`, but we'll establish a security policy, and require a
+permission and owner for the subscription. We'll use
 :mod:`zope.principalregistry` to provide a global ``IAuthentication``
-utility and a defined principal:
+utility; this also provides a global ``IUnauthenticatedPrincipal``
+that is used if the ``owner`` cannot be found at runtime:
 
 .. doctest::
 
@@ -81,22 +83,15 @@ utility and a defined principal:
    ...   <include package="zope.component" />
    ...   <include package="zope.container" />
    ...   <include package="zope.principalregistry" />
-   ...   <include package="zope.principalregistry" file="meta.zcml" />
+   ...   <include package="zope.securitypolicy" />
+   ...   <include package="zope.securitypolicy" file="securitypolicy.zcml" />
    ...   <include package="nti.webhooks" />
-   ...   <principal
-   ...         id="zope.manager"
-   ...         title="Manager"
-   ...         description="System Manager"
-   ...         login="admin"
-   ...         password_manager="SHA1"
-   ...         password="40bd001563085fc35165329ea1ff5c5ecbdbbeef"
-   ...         />
    ...   <webhooks:staticSubscription
    ...             to="https://this_domain_does_not_exist"
    ...             for="zope.container.interfaces.IContentContainer"
    ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent"
    ...             permission="zope.View"
-   ...             owner="zope.manager" />
+   ...             owner="some.one" />
    ... </configure>
    ... """)
 
@@ -112,11 +107,100 @@ Next, we can find the :term:`active` subscription, just as before:
    [<...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>]
 
 
+Subscription Is Not Applicable By Default
+-----------------------------------------
+
 Next, we need to know if the subscription is :term:`applicable` to the
-data. Unlike before, since we have security constraints in place, the subscription is *not* applicable:
+data. Unlike before, since we have security constraints in place, the
+subscription is *not* applicable:
 
 .. doctest::
 
    >>> subscriptions = find_active_subscriptions_for(event.object, event)
    >>> [subscription.isApplicable(event.object) for subscription in subscriptions]
+   [True]
+
+Wait, wait...what happened there? It turns out that since we don't
+have any defined principal identified by ``some.one``, we use the
+global ``IUnauthenticatedPrincipal``, an anonymous user. In turn, the
+directives executed by loading ``securitypolicy.zcml`` from
+``zope.securitypolicy`` give anonymous users the ``zope.View``
+permission by default. Let's reverse that and check again.
+
+.. doctest::
+
+   >>> from zope.securitypolicy.rolepermission import rolePermissionManager
+   >>> rolePermissionManager.denyPermissionToRole('zope.View', 'zope.Anonymous')
+   >>> [subscription.isApplicable(event.object) for subscription in subscriptions]
+   [False]
+
+Ahh, that's better.
+
+Subscription Applicable Once Principals are Defined
+---------------------------------------------------
+
+To grant access in an expected way, we'll use
+``zope.principalregistry`` to globally define the prinicpal we're
+looking for, as well as globally grant that principal the permissions
+necessary:
+
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="zope.securitypolicy" file="meta.zcml" />
+   ...   <include package="zope.principalregistry" file="meta.zcml" />
+   ...   <principal
+   ...         id="some.one"
+   ...         title="Some One"
+   ...         login="some.one"
+   ...         password_manager="SHA1"
+   ...         password="40bd001563085fc35165329ea1ff5c5ecbdbbeef"
+   ...         />
+   ...   <grant principal="some.one" permission="zope.View" />
+   ... </configure>
+   ... """)
+
+Now our webhook is :term:`applicable`:
+
+.. doctest::
+
+   >>> [subscription.isApplicable(event.object) for subscription in subscriptions]
+   [True]
+
+Existing Interactions
+---------------------
+
+If there was already an interaction going on (e.g., for the logged in
+user that created the object), the owner of the subscription is added
+to that interaction for purposes of checking permissions. Security
+policies generally only grant access if all participations in the
+interaction have access.
+
+We'll demonstrate this by creating and acting as a new principal and
+then checking access. Because our new user has no permissions on the
+object being created (which of course is highly unusual), the
+permission check will fail.
+
+.. doctest::
+
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="zope.principalregistry" file="meta.zcml" />
+   ...   <principal
+   ...         id="some.one.else"
+   ...         title="Some One Else"
+   ...         login="some.one.else"
+   ...         password_manager="SHA1"
+   ...         password="40bd001563085fc35165329ea1ff5c5ecbdbbeef"
+   ...         />
+   ... </configure>
+   ... """)
+   >>> from zope.security.testing import interaction
+   >>> with interaction('some.one.else'):
+   ...    [subscription.isApplicable(event.object) for subscription in subscriptions]
    [False]

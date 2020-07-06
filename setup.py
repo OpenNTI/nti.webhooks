@@ -14,6 +14,7 @@ TESTS_REQUIRE = [
     'nti.testing',
     'zope.testrunner',
     'zope.lifecycleevent',
+    'zope.securitypolicy', # ZCML directives for granting/denying
     # Easy mocking of ``requests``.
     'responses',
 ]

@@ -12,10 +12,24 @@ from zope import component
 from zope.interface import implementer
 from zope.component.globalregistry import BaseGlobalComponents
 
+from zope.authentication.interfaces import IAuthentication
+from zope.authentication.interfaces import IUnauthenticatedPrincipal
+from zope.authentication.interfaces import PrincipalLookupError
+
+from zope.security.interfaces import IPermission
+from zope.security.management import newInteraction
+from zope.security.management import queryInteraction
+from zope.security.management import getInteraction
+from zope.security.management import endInteraction
+from zope.security.management import checkPermission
+from zope.security.testing import Participation
+
+
 from zope.container.interfaces import INameChooser
 from zope.container.btree import BTreeContainer
 from zope.container.constraints import checkObject
 from zope.cachedescriptors.property import CachedProperty
+
 
 from nti.schema.fieldproperty import createDirectFieldProperties
 from nti.schema.schema import SchemaConfigured
@@ -53,6 +67,38 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         SchemaConfigured.__init__(self, **kwargs)
         _CheckObjectOnSetBTreeContainer.__init__(self)
 
+    def _find_principal(self, data):
+        principal = None
+        for context in (data, None):
+            auth = component.queryUtility(IAuthentication, context=context)
+            if auth is None:
+                continue
+
+            try:
+                principal = auth.getPrincipal(self.owner_id)
+            except PrincipalLookupError:
+                # If no principal by that name exists, use the unauthenticatedPrincipal.
+                # This could return None. It will still be replaced by the
+                # named principal in the other IAuthentication, if need be.
+                principal = auth.unauthenticatedPrincipal()
+            else:
+                assert principal is not None
+                break
+        if principal is None:
+            # Hmm. Either no IAuthentication found, or none of them found a
+            # principal while also not having an unauthenticated principal.
+            # In that case, we will fall back to the global IUnauthenticatedPrincipal as
+            # defined by zope.principalregistry. This should typically not happen.
+            principal = component.getUtility(IUnauthenticatedPrincipal)
+        return principal
+
+    def _find_permission(self, data):
+        for context in (data, None):
+            perm = component.queryUtility(IPermission, self.permission_id, context=context)
+            if perm is not None:
+                break
+        return perm
+
     def isApplicable(self, data):
         if hasattr(self.for_, 'providedBy'):
             if not self.for_.providedBy(data):
@@ -61,15 +107,39 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             if not isinstance(data, self.for_): # pylint:disable=isinstance-second-argument-not-valid-type
                 return False
 
-        if not self.permission_id or not self.owner_id:
+        if not self.permission_id and not self.owner_id:
+            # If no security is requested, we're good.
             return True
 
-        # TODO: Check the principal and the permission. Find the permission
-        # by name in the registry, find the principal_id by name in the
-        # registry, use the security policy to check access.
-        # TODO: We probably need to do the principal lookup in the context of the data, just in case
-        # there are local principal registries.
-        return False
+        # OK, now we need to find the permission and the principal.
+        # Both should be found in the context of the data; if not
+        # there, then check the currently installed site.
+        principal = self._find_principal(data)
+        permission = self._find_permission(data)
+
+        if principal is None or permission is None:
+            # A missing permission causes zope.security to grant full access.
+            # It's treated the same as zope.Public. So don't let that happen.
+            return False
+
+        # Now, we need to set up the interaction and do the security check.
+        participation = Participation(principal)
+        current_interaction = queryInteraction()
+        if current_interaction is not None:
+            # Cool, we can add our participation to the interaction.
+            current_interaction.add(participation)
+        else:
+            newInteraction(participation)
+
+        try:
+            # Yes, this needs the ID of the permission, not the permission object.
+            return checkPermission(self.permission_id, data)
+        finally:
+            if current_interaction is not None:
+                current_interaction.remove(participation)
+            else:
+                endInteraction()
+
 
     @CachedProperty('dialect_id')
     def dialect(self):
@@ -91,7 +161,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         validator = component.getUtility(IWebhookDestinationValidator, u'', self)
         try:
             validator.validateTarget(self.to)
-        except Exception as ex: # pylint:disable=broad-except
+        except Exception: # pylint:disable=broad-except
             attempt.status = 'failed'
             # The exception value can vary; it's not intended to be presented to end
             # users as-is
