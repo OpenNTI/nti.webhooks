@@ -22,11 +22,15 @@ from zope.componentvocabulary.vocabulary import UtilityNames
 from zope.principalregistry.metadirectives import TextId
 
 from zope.schema import Field
-from zope.schema import NativeString
+
 
 from nti.schema.field import Object
 from nti.schema.field import ValidText as Text
 from nti.schema.field import ValidChoice as Choice
+from nti.schema.field import ValidURI as URI
+from nti.schema.field import Dict
+from nti.schema.field import Int
+from nti.schema.field import Timedelta
 
 from nti.webhooks._schema import HTTPSURL
 
@@ -178,15 +182,115 @@ class IWebhookDialect(Interface):
         externalizer named "webhook-delivery".
         """
 
+class IWebhookDeliveryAttemptRequest(ICreatedTime):
+    """
+    The details about an HTTP request sent to a webhook.
+    """
+
+    # This is largely based on a requests.PreparedRequest,
+    # found in the attribute requests.Response.request.
+    # XXX: Resolved host addresses would be good too, although in a round-robin DNS
+    # we don't necessarily know what one we used. Can requests tell us that?
+
+    url = URI(
+        title=u"The URL requested",
+        description=u"""
+        This is denormalized from the containing delivery attempt and
+        its containing subscription because the target URL may change
+        over time.
+        """,
+        required=True,
+    )
+
+    method = Text(
+        title=u'The HTTP method the request was sent with.',
+        default=u'POST',
+        required=True
+    )
+
+    body = Text(
+        # XXX: Think this through. Should it always be bytes?
+        # Displaying in the web interface gets more complicated that
+        # way, and we'd need to store an encoding. OTOH, we know we
+        # externalize to a Text string and later encode it. Or maybe
+        # just keep this as a dict in all cases? We'll be sending JSON
+        # data...
+        title=u"The external data sent to the destination.",
+        required=True,
+    )
+
+    headers = Dict(
+        title=u'The headers sent with the request.',
+        description=u"""
+        Order is not kept. Security sensitive headers, such as
+        those relating to authentication, are removed.
+        """,
+        key_type=Text(),
+        value_type=Text(),
+        required=True,
+    )
+
+
+class IWebhookDeliveryAttemptResponse(ICreatedTime):
+    """
+    The details about the HTTP response.
+
+    - HTTP redirect history is lost; only the final response
+      is saved.
+    """
+    # Much of this is based on what's available in a requests.Response
+    # object. requests exposes the redirect history and we could keep it,
+    # if desired.
+
+    status_code = Int(
+        title=u"The HTTP status code",
+        description=u"For example, 200.",
+        required=True
+    )
+
+    reason = Text(
+        title=u"The HTTP reason.",
+        description=u"For example, 'OK'",
+        required=True,
+    )
+
+    headers = Dict(
+        title=u"The headers received from the server.",
+        key_type=Text(),
+        value_type=Text(),
+        required=True,
+    )
+
+    content = Text(
+        title=u"The decoded contents of the response, if any.",
+        description=u"""
+        If the response contained a body, but it wasn't decodable
+        as text, XXX: What?
+
+        TODO: Place some limits on this?
+        """,
+        required=False,
+    )
+
+    elapsed = Timedelta(
+        title=u"The amount of time it took to send and receive.",
+        description=u"""
+        This should be the closest measurement possible of the time
+        taken between sending the first byte of the request, and
+        receiving a usable response.
+        """
+    )
+
+
 class IWebhookDeliveryAttempt(IContained, ILastModified):
+    """
+    The duration of the request/reply cycle is roughly captured
+    by the difference in the ``createdTime`` attributes of the
+    request and response. More precisely, the network time is captured
+    by the ``elapsed`` attribute of the response.
+    """
     containers('.IWebhookSubscription')
 
-    # XXX: Need to store the outgoing request, including
-    # headers (authentication headers?) and method, as well as
-    # the response, including headers. Timestamps are good too.
-    # Resolved host addresses would be good too, although in a round-robin DNS
-    # we don't necessarily know what one we used. Can requests tell us that?
-    # what about urllib3?
 
     status = Choice(
         title=u"The status of the delivery attempt.",
@@ -208,12 +312,8 @@ class IWebhookDeliveryAttempt(IContained, ILastModified):
         required=False,
     )
 
-    payload_data = NativeString(
-        # XXX: Think this through. Should it always be bytes? Displaying
-        # in the web interface gets more complicated that way...
-        title=u"The external data sent to the destination.",
-        required=True,
-    )
+    request = Object(IWebhookDeliveryAttemptRequest, required=True)
+    response = Object(IWebhookDeliveryAttemptResponse, required=True)
 
 
 class IWebhookSubscription(IContainerNamesContainer):

@@ -7,7 +7,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
+
 from concurrent import futures
+
 import requests
 
 from zope import interface
@@ -16,6 +19,10 @@ from zope.cachedescriptors.property import Lazy
 
 from nti.webhooks.interfaces import IWebhookDeliveryManager
 from nti.webhooks.interfaces import IWebhookDeliveryManagerShipmentInfo
+
+logger = __import__('logging').getLogger(__name__)
+
+text_type = type(u'')
 
 @interface.implementer(IWebhookDeliveryManagerShipmentInfo)
 class ShipmentInfo(object):
@@ -28,13 +35,51 @@ class _TrivialShipmentInfo(ShipmentInfo):
         self._sub_and_attempts = list(subscriptions_and_attempts)
 
     def deliver(self):
+        # pylint:disable=broad-except
         for sub, attempt in self._sub_and_attempts:
-            response = requests.post(sub.to, data=attempt.payload_data)
+            attempt.request.createdTime = time.time()
+            try:
+                response = requests.post(sub.to, data=attempt.payload_data)
+            except Exception as ex:
+                logger.exception("Failed to deliver for attempt %s/%s", sub, attempt)
+                attempt.response = None
+                attempt.status = 'failed'
+                attempt.message = str(ex)
+                continue
+
             attempt.status = 'successful' if response.ok else 'failed'
-            # XXX: Store the full response status, data (to some limit) and headers.
-            # We don't want to pickle the Response object to avoid depending on internal
-            # details, we need to extract it.
             attempt.message = u'%s %s' % (response.status_code, response.reason)
+
+            try:
+                self._fill_req_resp_from_request(attempt, response)
+                # This is generally a programming error, probably an encoding something
+                # or other.
+            except Exception as ex:
+                logger.exception("Failed to parse response for attempt %s/%s", sub, attempt)
+                attempt.message = str(ex)
+
+    if str is bytes:
+        def _dict_to_text(self, headers):
+            return {text_type(k): text_type(v) for k, v in headers.iteritems()}
+    else:
+        _dict_to_text = dict
+
+    def _fill_req_resp_from_request(self, attempt, http_response):
+        http_request = http_response.request # type: requests.PreparedRequest
+        req = attempt.request
+        rsp = attempt.response
+        rsp.createdTime = time.time()
+
+        req.url = http_request.url
+        req.method = text_type(http_request.method)
+        req.body = text_type(http_request.body) # XXX: Text/bytes. This uses default encoding.
+        req.headers = self._dict_to_text(http_request.headers)
+
+        rsp.status_code = http_response.status_code
+        rsp.reason = text_type(http_response.reason)
+        rsp.headers = self._dict_to_text(http_response.headers)
+        rsp.content = http_response.text # XXX: Catch decoding errors?
+        rsp.elapsed = http_response.elapsed
 
 @interface.implementer(IWebhookDeliveryManager)
 class DefaultDeliveryManager(Contained):
@@ -69,7 +114,10 @@ class DefaultDeliveryManager(Contained):
         # of futures atomic. It's probably important to pass a new list here
         # so that it doesn't mutate out from under the waiter as things finish.
         # Note that this waits only for tasks that were already submitted.
-        futures.wait(list(self.__tasks), timeout=timeout)
+        t = list(self.__tasks)
+        done, not_done = futures.wait(t, timeout=timeout)
+        assert not not_done, not_done
+        assert len(done) == len(t), (done, t)
 
     def _reset(self):
         # Called for test cleanup.

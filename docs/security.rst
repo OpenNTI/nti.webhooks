@@ -207,3 +207,10 @@ permission check will fail.
    >>> with interaction('some.one.else'):
    ...    [subscription.isApplicable(event.object) for subscription in subscriptions]
    [False]
+
+
+
+.. testcleanup::
+
+   from zope.testing import cleanup
+   cleanup.cleanUp()

@@ -11,6 +11,7 @@ Contents:
    glossary
    static
    security
+   customizing_payloads
    api/index
    changelog
 

@@ -37,6 +37,9 @@ Once that's done, we can use the ``webhooks:staticSubscription`` XML
 tag to define a subscription to start receiving our webhook
 deliveries.
 
+ZCML Directive Arguments
+========================
+
 There is only one required argument: the destination URL.
 
 The destination must be HTTPS.
@@ -83,6 +86,8 @@ If we specify a permission to check, it must exist.
    >>> from zope.testing import cleanup
    >>> cleanup.cleanUp()
 
+Specifying Which Objects
+------------------------
 
 The above (unsuccessful) registration would have tried to send *all*
 ``IObjectEvent`` events for all objects that implement
@@ -111,6 +116,10 @@ deliver a webhook.
    ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent" />
    ... </configure>
    ... """)
+
+
+Active Subscriptions
+====================
 
 Now that we have that in place, let's verify that it exists:
 
@@ -153,6 +162,9 @@ data. Since we didn't specify a permission or a principal to check, the subscrip
    >>> [subscription.isApplicable(event.object) for subscription in subscriptions]
    [True]
 
+Unsuccessful Delivery Attempts
+==============================
+
 Now lets demonstrate what happens when we actually fire this event. First, we must be in a transaction:
 
 .. doctest::
@@ -173,6 +185,9 @@ We can see that we have attached a data manager to the transaction:
 
    >>> tx._resources
    [<nti.webhooks.datamanager.WebhookDataManager...>]
+
+Don't Fail The Transaction
+--------------------------
 
 However, recall that we specified an invalid domain name, so there is
 no where to attempt to deliver the webhook too. For static webhooks,
@@ -198,6 +213,8 @@ But it does record a failed attempt in the subscription:
    Verification of the destination URL failed. Please check the domain.
 
 
+Successful Delivery Attempts
+============================
 
 Let's reset things and look at what a successful delivery might look like.
 
@@ -264,15 +281,64 @@ finish, and then we can examine our delivery attempt:
 
    >>> _ = mock_network.__exit__(None, None, None)
 
+Attempt Details
+---------------
+
+The subscription once again has an attempt recorded; this time it's successful:
+
 .. doctest::
 
    >>> len(subscription)
    1
    >>> attempt = list(subscription.values())[0]
+   >>> from zope.interface import verify
+   >>> from nti.webhooks import interfaces
+   >>> verify.verifyObject(interfaces.IWebhookDeliveryAttempt, attempt)
+   True
    >>> attempt.status
    'successful'
    >>> print(attempt.message)
    200 OK
+
+
+We can see details about the request that went on the wire:
+
+.. doctest::
+
+   >>> verify.verifyObject(interfaces.IWebhookDeliveryAttemptRequest, attempt.request)
+   True
+   >>> print(attempt.request.url)
+   https://example.com/some/path
+   >>> print(attempt.request.method)
+   POST
+   >>> import pprint
+   >>> pprint.pprint({str(k): str(v) for k, v in attempt.request.headers.items()})
+   {'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Content-Length': '94',
+    'User-Agent': '...'}
+   >>> print(attempt.request.body)
+   {"Class": "NonExternalizableObject", "InternalType": "<class 'zope.container.folder.Folder'>"}
+
+(If you're curious about that "NonExternalizableObject" business, then see :doc:`customizing_payloads`.)
+
+And we can see information about the response the webhook got:
+
+.. doctest::
+
+   >>> verify.verifyObject(interfaces.IWebhookDeliveryAttemptResponse, attempt.response)
+   True
+   >>> attempt.response.status_code
+   200
+   >>> print(attempt.response.reason)
+   OK
+   >>> pprint.pprint({str(k): str(v) for k, v in attempt.response.headers.items()})
+   {'Content-Type': 'text/plain'}
+   >>> print(attempt.response.content)
+   <BLANKLINE>
+   >>> attempt.response.elapsed
+   datetime.timedelta(...)
 
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
