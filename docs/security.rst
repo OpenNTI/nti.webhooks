@@ -33,8 +33,11 @@ of the directive).
    hierarchy but mean two completely different principals, that is a
    valid possibility.)
 
-If no principal can be found, the subscription will not be
-:term:`applicable` and no delivery will be attempted.
+If no principal can be found, the unauthenticated (anonymous)
+principal will be used instead; depending on the security policy and
+permission structure in use, the subscription may or may not be
+:term:`applicable`.
+
 
 Permissions
 ===========
