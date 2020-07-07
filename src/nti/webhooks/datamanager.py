@@ -78,9 +78,39 @@ class _DataManagerState(object):
 
 @implementer(IDataManager)
 class WebhookDataManager(object):
+    """
+    Collects and manages subscriptions to deliver to.
 
+    There should usually only be one of these joined to a transaction
+    at any time. Use the class method :meth:`join_transaction` to
+    accomplish this.
+    """
     transaction = None
     _tpc_state = None
+
+    @classmethod
+    def join_transaction(cls, transaction_manager, data, event, subscriptions):
+        """
+        Add the *data*, *event* and *subscriptions* to the transaction being
+        managed by the *transaction_manager*.
+
+        If there is no data manager, one is created. Then the effect is the same
+        as calling :meth:`add_subscriptions`.
+
+        Returns the instance of this class that was either created or already
+        joined to the transaction.
+        """
+        tx = transaction_manager.get() # If not begun, this is an error.
+
+        try:
+            data_man = tx.data(cls)
+        except KeyError:
+            data_man = cls(transaction_manager, data, event, subscriptions)
+            tx.join(data_man)
+            tx.set_data(cls, data_man)
+        else:
+            data_man.add_subscriptions(data, event, subscriptions)
+        return data_man
 
     def __init__(self, transaction_manager, data=None, event=None, subscriptions=()):
         """

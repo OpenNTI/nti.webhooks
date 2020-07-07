@@ -22,7 +22,7 @@ from nti.webhooks.datamanager import WebhookDataManager
 
 def find_active_subscriptions_for(data, event):
     """
-    Part of `dispatch_webhook_event`, broken out for testing.
+    Part of :func:`dispatch_webhook_event`, broken out for testing.
 
     Internal use only.
     """
@@ -68,14 +68,4 @@ def dispatch_webhook_event(data, event):
     if subscriptions:
         # TODO: Choosing which datamanager resource to use might
         # be a good extension point.
-        tx_man = transaction.manager
-        tx = tx_man.get() # If not begun, this is an error.
-
-        try:
-            data_man = tx.data(dispatch_webhook_event)
-        except KeyError:
-            data_man = WebhookDataManager(tx_man, data, event, subscriptions)
-            tx.set_data(dispatch_webhook_event, data_man)
-            tx.join(data_man)
-        else:
-            data_man.add_subscriptions(data, event, subscriptions)
+        WebhookDataManager.join_transaction(transaction.manager, data, event, subscriptions)

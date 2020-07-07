@@ -73,6 +73,20 @@ class _TrivialShipmentInfo(ShipmentInfo):
         req.url = http_request.url
         req.method = text_type(http_request.method)
         req.body = text_type(http_request.body) # XXX: Text/bytes. This uses default encoding.
+
+        # XXX: What about stripping security sensitive headers from
+        # request and response? I have a comment about that in the
+        # interface definition. But as I was implementing, I couldn't
+        # come up with a scenario where that actually matters
+        # (currently). Outgoing hook deliveries include no
+        # authentication, so there's nothing on that side, and no
+        # reason to expect that a response will include anything
+        # either.
+        #
+        # I looked at hooks configured for several different services
+        # and didn't find anything that needed to be dropped.
+        #
+        # We'll know more as we make real-life deliveries.
         req.headers = self._dict_to_text(http_request.headers)
 
         rsp.status_code = http_response.status_code
@@ -80,6 +94,7 @@ class _TrivialShipmentInfo(ShipmentInfo):
         rsp.headers = self._dict_to_text(http_response.headers)
         rsp.content = http_response.text # XXX: Catch decoding errors?
         rsp.elapsed = http_response.elapsed
+
 
 @interface.implementer(IWebhookDeliveryManager)
 class DefaultDeliveryManager(Contained):
