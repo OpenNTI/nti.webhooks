@@ -12,6 +12,7 @@ Contents:
    static
    security
    customizing_payloads
+   dynamic
    api/index
    changelog
 

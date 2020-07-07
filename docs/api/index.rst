@@ -5,3 +5,4 @@
 .. toctree::
 
    interfaces
+   dialect

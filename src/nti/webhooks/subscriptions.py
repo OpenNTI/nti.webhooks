@@ -67,6 +67,13 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         SchemaConfigured.__init__(self, **kwargs)
         _CheckObjectOnSetBTreeContainer.__init__(self)
 
+    def pop(self):
+        """Testing only. Removes and returns a random value."""
+        k = list(self.keys())[0]
+        v = self[k]
+        del self[k]
+        return v
+
     def _find_principal(self, data):
         principal = None
         for context in (data, None):

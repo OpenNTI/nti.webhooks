@@ -4,6 +4,12 @@
 
 .. currentmodule:: nti.webhooks.zcml
 
+.. testsetup::
+
+   from zope.testing import cleanup
+   from nti.webhooks.testing import UsingMocks
+   using_mocks = UsingMocks("POST", 'https://example.com/some/path', status=200)
+
 The simplest type of webhook :term:`subscription` is one that is
 configured statically, typically at application startup time. This
 package provides ZCML directives to facilitate this. The directives
@@ -117,6 +123,12 @@ deliver a webhook.
    ... </configure>
    ... """)
 
+.. note::
+
+   Sometimes, the ``for`` and ``when`` attributes may not quite get
+   you what you want. You can use an adapter to
+   :class:`nti.webhooks.interfaces.IWebhookPayload` to derive the desired data. For more, see
+   :doc:`customizing_payloads`.
 
 Active Subscriptions
 ====================
@@ -241,23 +253,13 @@ Let's reset things and look at what a successful delivery might look like.
    0
 
 As before, we configure the package (this time with a resolvable URL)
-and get the subscription object, confirming that it has no history. To
-avoid actually trying to talk to example.com, we'll install some mocks
-(this will be hidden from the rendered documentation because it's an
-implementation detail).
+and get the subscription object, confirming that it has no history.
 
-.. doctest::
-   :hide:
+.. note::
 
-   >>> import responses
-   >>> import contextlib
-   >>> @contextlib.contextmanager
-   ... def using_mocks():
-   ...   with responses.RequestsMock() as mock:
-   ...       mock.add(responses.POST, 'https://example.com/some/path', status=200)
-   ...       yield
-   >>> mock_network = using_mocks()
-   >>> mock_network.__enter__()
+   To avoid actually trying to talk to example.com, we'll be using some mocks.
+   This isn't included in the documentation because it's an
+   implementation detail.
 
 Now we will create the object and send the hook.
 
@@ -275,11 +277,6 @@ finish, and then we can examine our delivery attempt:
    >>> from zope import component
    >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
    >>> component.getUtility(IWebhookDeliveryManager).waitForPendingDeliveries()
-
-.. doctest::
-   :hide:
-
-   >>> _ = mock_network.__exit__(None, None, None)
 
 Attempt Details
 ---------------
@@ -346,5 +343,6 @@ And we can see information about the response the webhook got:
 
 .. testcleanup::
 
+   cleanup.addCleanUp(using_mocks.finish)
    from zope.testing import cleanup
    cleanup.cleanUp()

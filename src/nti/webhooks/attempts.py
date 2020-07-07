@@ -47,6 +47,7 @@ class WebhookDeliveryAttempt(_Base, Contained):
     # Allow delayed validation for these things.
     request = None
     response = None
+    __parent__ = None
 
     def __init__(self, **kwargs):
         super(WebhookDeliveryAttempt, self).__init__(**kwargs)

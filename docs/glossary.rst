@@ -21,6 +21,11 @@
 
       .. seealso:: :class:`~.IWebhookSubscription`
 
+   trigger
+      An :class:`zope.interface.interfaces.IObjectEvent`, when
+      notified through :func:`zope.event.notify` may trigger a
+      matching subscription to attempt a delivery.
+
    active
       Of a subscription: An existing subscription is active if it
       is ready to accept webhook deliveries. Contrast with
@@ -34,4 +39,5 @@
 
    applicable
       Of a subscription: Does the subscription apply to some piece of
-      data, including permission checks?
+      data, including permission checks? Only active subscriptions
+      should be applicable.

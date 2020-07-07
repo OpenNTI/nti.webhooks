@@ -38,6 +38,8 @@ class _DataManagerState(object):
     all_subscriptions = None
 
     #: A dictionary of ``{data: {dialect: external_form}}``.
+    #: This is to avoid externalizing a single data object more times
+    #: than needed.
     _data_to_ext_dialect = None
 
     #: A dictionary of subscription to list of delivery attempts.
