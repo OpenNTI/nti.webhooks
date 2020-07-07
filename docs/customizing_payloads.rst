@@ -50,9 +50,9 @@ Next, we :term:`trigger` the subscription and wait for it to be delivered.
 
 .. doctest::
 
-   >>> def trigger_delivery(contents=()):
+   >>> def trigger_delivery(factory=Folder, contents=()):
    ...    _ = transaction.begin()
-   ...    folder = Folder()
+   ...    folder = factory()
    ...    for k, v in contents: folder[k] = v
    ...    lifecycleevent.created(folder)
    ...    transaction.commit()
@@ -109,6 +109,9 @@ externalized instead of the target of the event.
    The security checks described in :doc:`security` apply to the object of the
    triggering event, *not* the adapted value.
 
+Single Adapters
+---------------
+
 Working from lowest priority to highest priority, let's demonstrate some adapters.
 
 First, an adapter for a single object with no name.
@@ -120,9 +123,9 @@ First, an adapter for a single object with no name.
    >>> from nti.webhooks.interfaces import IWebhookPayload
    >>> @implementer(IWebhookPayload)
    ... @adapter(Folder)
-   ... def trivial_adapter(folder):
+   ... def single_adapter(folder):
    ...    return len(folder)
-   >>> component.provideAdapter(trivial_adapter)
+   >>> component.provideAdapter(single_adapter)
 
 Triggering the event now produces a different body.
 
@@ -132,7 +135,7 @@ Triggering the event now produces a different body.
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
    0
-   >>> trigger_delivery([('k', 'v')])
+   >>> trigger_delivery(contents=[('k', 'v')])
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
    1
@@ -145,13 +148,65 @@ Higher priority is a named adapter.
    >>> @implementer(IWebhookPayload)
    ... @adapter(Folder)
    ... @named("webhook-delivery")
-   ... def named_adapter(folder):
+   ... def named_single_adapter(folder):
    ...     return "A folder"
-   >>> component.provideAdapter(named_adapter)
+   >>> component.provideAdapter(named_single_adapter)
    >>> trigger_delivery()
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
    "A folder"
+
+Of course, if the object already provides ``IWebhookPayload``,
+then it is returned directly without using those adapters.
+
+.. doctest::
+
+   >>> @implementer(IWebhookPayload)
+   ... class PayloadFactory(Folder):
+   ...    """A folder that is its own payload."""
+   >>> trigger_delivery(factory=PayloadFactory)
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.body)
+   {"Class": "NonExternalizableObject", "InternalType": "<class 'PayloadFactory'>"}
+
+Multi-adapters
+--------------
+
+Multi-adapters are the highest priority. They take precedence over the object itself
+being a ``IWebhookPayload`` already.
+
+The unnamed adapter for the event and the object is higher priority than the named single
+adapter or the object itself.
+
+.. doctest::
+
+   >>> from zope.lifecycleevent.interfaces import IObjectCreatedEvent
+   >>> @implementer(IWebhookPayload)
+   ... @adapter(Folder, IObjectCreatedEvent)
+   ... def multi_adapter(folder, event):
+   ...    return "folder-and-event"
+   >>> component.provideAdapter(multi_adapter)
+   >>> trigger_delivery()
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.body)
+   "folder-and-event"
+
+Finally, the highest priority is a named multi-adapter.
+
+.. doctest::
+
+   >>> from zope.lifecycleevent.interfaces import IObjectCreatedEvent
+   >>> @implementer(IWebhookPayload)
+   ... @adapter(Folder, IObjectCreatedEvent)
+   ... @named("webhook-delivery")
+   ... def named_multi_adapter(folder, event):
+   ...    return "named-folder-and-event"
+   >>> component.provideAdapter(named_multi_adapter)
+   >>> trigger_delivery()
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.body)
+   "named-folder-and-event"
+
 
 - Talk about writing dialects.
 - Talk about adapting ``event.object`` to ``IWebhookPayload`` (and

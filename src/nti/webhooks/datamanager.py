@@ -33,13 +33,13 @@ class _DataManagerState(object):
     Helper to hold intermediate data for the data manager.
     """
 
-    #: A list of ``(data, subscription)`` tuples. The event that caused the data to be
-    #: registered is discarded.
+    #: A list of ``(data, event, subscription)`` tuples.
     all_subscriptions = None
 
     #: A dictionary of ``{data: {dialect: external_form}}``.
     #: This is to avoid externalizing a single data object more times
-    #: than needed.
+    #: than needed. TODO: Add a way to let the dialect let us know if it
+    #: used the event or not so we can cache more efficiently?
     _data_to_ext_dialect = None
 
     #: A dictionary of subscription to list of delivery attempts.
@@ -51,29 +51,31 @@ class _DataManagerState(object):
     shipment_info = None
 
     def __init__(self, subscription_dict):
+        # TODO: This was designed before we used the event to externalize.
+        # Rethink and simplify.
         all_subscriptions = defaultdict(set)
         data_to_dialects = self._data_to_ext_dialect = defaultdict(dict)
-        for (data, _event), subscriptions in subscription_dict.items():
-            all_subscriptions[data].update(subscriptions)
+        for (data, event), subscriptions in subscription_dict.items():
+            all_subscriptions[(data, event)].update(subscriptions)
             data_to_dialects[data].update({sub.dialect: None for sub in subscriptions})
 
         self.all_subscriptions = [
-            (data, sub)
-            for data, subscriptions in all_subscriptions.items()
+            (data, event, sub)
+            for (data, event), subscriptions in all_subscriptions.items()
             for sub in subscriptions
         ]
 
         sub_to_payload = self.subscription_to_payloads = defaultdict(list)
-        for data, sub in self.all_subscriptions:
-            sub_to_payload[sub].append(self._ext_data(data, sub))
+        for data, event, sub in self.all_subscriptions:
+            sub_to_payload[sub].append(self._ext_data(data, event, sub))
 
         self.subscription_to_delivery_attempt = defaultdict(list)
 
-    def _ext_data(self, data, subscription):
+    def _ext_data(self, data, event, subscription):
         dialect = subscription.dialect
         result = self._data_to_ext_dialect[data][dialect]
         if result is None:
-            result = self._data_to_ext_dialect[data][dialect] = dialect.externalizeData(data)
+            result = self._data_to_ext_dialect[data][dialect] = dialect.externalizeData(data, event)
         return result
 
 

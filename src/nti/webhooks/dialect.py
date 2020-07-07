@@ -34,9 +34,9 @@ class DefaultWebhookDialect(object):
     def __init__(self):
         pass
 
-    def produce_payload(self, data):
+    def produce_payload(self, data, event):
         """
-        produce_payload(data) -> IWebhookPayload
+        produce_payload(data, event) -> IWebhookPayload
 
         Non-interface method. Given data delivered through an event,
         try to find a ``IWebhookPayload`` for it. From highest to lowest priority,
@@ -53,7 +53,19 @@ class DefaultWebhookDialect(object):
         Note that if there exists an adapter registration that
         returns None, we continue with lower-priority adapters.
         """
-        # Building this as we test it.
+        result = component.queryMultiAdapter((data, event), IWebhookPayload,
+                                             name=self.externalizer_name, context=data)
+        if result is not None:
+            return result
+
+        result = component.queryMultiAdapter((data, event), IWebhookPayload,
+                                             context=data)
+        if result is not None:
+            return result
+
+        if IWebhookPayload.providedBy(data):
+            return data
+
         result = component.queryAdapter(data, IWebhookPayload,
                                         name=self.externalizer_name, context=data)
         if result is not None:
@@ -61,8 +73,8 @@ class DefaultWebhookDialect(object):
         return component.queryAdapter(data, IWebhookPayload, default=data, context=data)
 
 
-    def externalizeData(self, data):
-        payload = self.produce_payload(data)
+    def externalizeData(self, data, event):
+        payload = self.produce_payload(data, event)
         ext_data = externalization.to_external_representation(payload,
                                                               name=self.externalizer_name)
         return ext_data

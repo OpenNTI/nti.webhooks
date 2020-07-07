@@ -167,7 +167,7 @@ class IWebhookDialect(Interface):
     Quirks for sending webhooks to specific services.
     """
 
-    def externalizeData(data):
+    def externalizeData(data, event):
         """
         Produce the byte-string that is the externalized version of *data*
         needed to send to webhooks using this dialect.
