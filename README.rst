@@ -3,10 +3,16 @@
 ==============
 
 .. image:: https://travis-ci.org/NextThought/nti.webhooks.svg?branch=master
-    :target: https://travis-ci.org/NextThought/nti.webhooks
+   :target: https://travis-ci.org/NextThought/nti.webhooks
 
 .. image:: https://coveralls.io/repos/github/NextThought/nti.webhooks/badge.svg?branch=master
-    :target: https://coveralls.io/github/NextThought/nti.webhooks?branch=master
+   :target: https://coveralls.io/github/NextThought/nti.webhooks?branch=master
+
+.. image:: https://readthedocs.org/projects/ntiwebhooks/badge/?version=latest
+   :target: https://ntiwebhooks.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
+
+.. sphinx-include-begin
 
 This package provides the infrastructure and delivery mechanisms for a
 server to support webhook delivery. For complete details and the
@@ -65,6 +71,8 @@ limited to:
   here.
 - Providing a user interface or HTTPS API for viewing webhook audit
   logs.
+- Enabling webhooks to fire only for specific objects. This package
+  deals with scopes (sites) and kinds of objects, not individual instances.
 
 In Scope/Features
 =================

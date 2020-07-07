@@ -13,6 +13,10 @@ TESTS_REQUIRE = [
     'coverage',
     'nti.testing',
     'zope.testrunner',
+    'zope.lifecycleevent',
+    'zope.securitypolicy', # ZCML directives for granting/denying
+    # Easy mocking of ``requests``.
+    'responses',
 ]
 
 def _read(fname):
@@ -52,8 +56,19 @@ setup(
     package_dir={'': 'src'},
     namespace_packages=['nti'],
     install_requires=[
+        # backport of concurrent.futures; implements the 3.7
+        # interface.
+        'futures; python_version == "2.7"',
+        'zope.authentication', # IAuthentication
         'zope.interface >= 5.1',
-        'zope.event',
+        'zope.container',
+        'zope.security', # IPrincipal, Permission
+        'zope.principalregistry', # TextId
+        'zope.componentvocabulary',
+        'zope.vocabularyregistry',
+        'zope.site',
+        'nti.externalization >= 2.0.0', # Consistent interface resolution order
+        'nti.schema',
         'setuptools',
         'transaction',
     ],
@@ -65,6 +80,6 @@ setup(
             'Sphinx',
             'sphinx_rtd_theme',
             'repoze.sphinx.autointerface',
-        ],
+        ] + TESTS_REQUIRE,
     },
 )

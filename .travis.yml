@@ -8,9 +8,11 @@ python:
   - pypy3
 script:
   - coverage run -m zope.testrunner --test-path=src  --auto-color --auto-progress
+  - coverage run -m sphinx -b doctest -d docs/_build/doctrees docs docs/_build/doctests
 env:
-    global:
-        - PYTHONHASHSEED=1042466059
+  global:
+    - PYTHONHASHSEED=1042466059
+    - ZOPE_INTERFACE_STRICT_IRO=1
 
 after_success:
   - coveralls
@@ -20,7 +22,7 @@ notifications:
 install:
   - pip install -U pip setuptools
   - pip install -U coveralls coverage
-  - pip install -U -e ".[test]"
+  - pip install -U -e ".[test,docs]"
 
 
 cache: pip
