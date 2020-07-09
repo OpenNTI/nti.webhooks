@@ -342,6 +342,6 @@ Lets apply some simple customizations and send again.
 
 .. testcleanup::
 
-   cleanup.addCleanUp(using_mocks.finish)
+   using_mocks.finish()
    from zope.testing import cleanup
    cleanup.cleanUp()
