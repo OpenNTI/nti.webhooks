@@ -174,7 +174,7 @@ not limited to:
   subscribes to "new user created" events at the global (root, base or
   "/") level, and a department head subscribes to "new user created"
   for their department ("/NOAA"), while a local office manager
-  subscribes to events for their office ("/NOAA/NWS/OKC"), then
+  subscribes to events for their office ("/NOAA/NWS/OUN"), then
   creating a new user in the OKC office may send three deliveries, one
   to the manager, one to the secretary, and one to the president.
 

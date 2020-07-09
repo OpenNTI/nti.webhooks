@@ -5,4 +5,7 @@
 .. toctree::
 
    interfaces
+   api
    dialect
+   subscriptions
+   subscribers

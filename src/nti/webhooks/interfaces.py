@@ -455,8 +455,14 @@ class IWebhookSubscriptionManager(IContainerNamesContainer):
     """
     contains(IWebhookSubscription)
 
-    def addSubscription(subscription):
+    def createSubscription(to=None, for_=None, when=None,
+                           owner_id=None, permission_id=None,
+                           dialect=None):
         """
-        XXX: Document me.
-        :param subscription: A `IWebhookSubscription`.
+        Create and store a new ``IWebhookSubscription`` in this manager.
+
+        The new subscription is returned. It is a child of this object.
+
+        All arguments are by keyword, and have the same meaning as
+        the attributes documented.
         """

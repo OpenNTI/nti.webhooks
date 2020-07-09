@@ -32,15 +32,15 @@ def find_active_subscriptions_for(data, event):
     # the ``__bases__`` of the site manager itself to walk up and find only the next utility.
     subscriptions = []
     provided = [providedBy(data), providedBy(event)]
-    last_sub_manager = None
+    seen_managers = set()
     for context in None, data:
         # A context of None means to use the current site manager.
         sub_managers = component.getUtilitiesFor(IWebhookSubscriptionManager, context)
         for _name, sub_manager in sub_managers:
-            if sub_manager is last_sub_manager:
+            if sub_manager in seen_managers:
                 # De-dup.
                 continue
-            last_sub_manager = sub_manager
+            seen_managers.add(sub_manager)
             local_subscriptions = sub_manager.registry.adapters.subscriptions(provided, None)
             subscriptions.extend(local_subscriptions)
     return subscriptions
