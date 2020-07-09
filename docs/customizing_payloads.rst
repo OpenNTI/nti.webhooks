@@ -90,10 +90,11 @@ There are a few different ways to customize the body, and they can be
 applied at the same time.
 
 The first way to customize the body is to register an adapter
-producing an ``IWebhookPayload.`` The adapter can be an adapter for
-just the object, or it can be a multi-adapter from the object and the
-event that triggered the subscription. By default, both an adapter
-named :attr:`.DefaultWebhookDialect.externalizer_name` and the unnamed
+producing an :class:`~nti.webhooks.interfaces.IWebhookPayload`. The
+adapter can be an adapter for just the object, or it can be a
+multi-adapter from the object and the event that triggered the
+subscription. By default, both an adapter named
+:attr:`.DefaultWebhookDialect.externalizer_name` and the unnamed
 adapter are attempted. When such an adapter is found, its value is
 externalized instead of the target of the event.
 
@@ -208,9 +209,93 @@ Finally, the highest priority is a named multi-adapter.
    "named-folder-and-event"
 
 
-- Talk about writing dialects.
-- Talk about adapting ``event.object`` to ``IWebhookPayload`` (and
-  actually write that).
+Cleanup
+-------
+
+Let's remove all those adapters and get back to a base state.
+
+.. doctest::
+
+   >>> gsm = component.getGlobalSiteManager()
+   >>> gsm.unregisterAdapter(named_multi_adapter, name=named_multi_adapter.__component_name__)
+   True
+   >>> gsm.unregisterAdapter(multi_adapter)
+   True
+   >>> gsm.unregisterAdapter(named_single_adapter, name=named_single_adapter.__component_name__)
+   True
+   >>> gsm.unregisterAdapter(single_adapter)
+   True
+
+Webhook Dialects
+================
+
+Another way to customize the body, and much more, is to write a
+:term:`dialect`. Every subscription is associated, by name, with a
+dialect. Dialects are registered utilities that implement
+:class:`nti.webhooks.interfaces.IWebhookDialect`; there is a global
+default (the empty name, '') dialect implemented in
+:class:`.DefaultWebhookDialect`. When defining new dialects, you
+should extend this class. In fact, the behaviour defined above is
+implemented by this class in its
+:meth:`.DefaultWebhookDialect.produce_payload` method.
+
+.. important::
+
+   Dialects should not be persistent objects. They may be used outside
+   of contexts where ZODB is available.
+
+
+Setting the Body
+----------------
+
+One easy way to customize the body is to use named externalizers. The
+default dialect uses an externalizer with the name given in
+:attr:`~.DefaultWebhookDialect.externalizer_name`; a subclass can
+change this by setting it on the class object. We'll demonstrate by
+first defining and registering a
+:class:`nti.externalization.interfaces.IInternalObjectExternalizer` with a custom name.
+
+.. doctest::
+
+   >>> from nti.externalization.interfaces import IInternalObjectExternalizer
+   >>> @implementer(IInternalObjectExternalizer)
+   ... @adapter(Folder)
+   ... @named('webhook-testing')
+   ... class FolderExternalizer(object):
+   ...     def __init__(self, context):
+   ...         self.context = context
+   ...     def toExternalObject(self, **kwargs):
+   ...         return {'Class': 'Folder', 'Length': len(self.context)}
+   >>> component.provideAdapter(FolderExternalizer)
+
+Next, we'll create a dialect that uses this externalizer, and register it:
+
+.. doctest::
+
+   >>> from nti.webhooks.dialect import DefaultWebhookDialect
+   >>> @named('webhook-testing')
+   ... class TestDialect(DefaultWebhookDialect):
+   ...     externalizer_name = 'webhook-testing'
+   >>> component.provideUtility(TestDialect())
+
+We then alter the subscription to use this dialect:
+
+.. doctest::
+
+   >>> subscription.dialect_id = 'webhook-testing'
+
+Now when we trigger the subscription, we use this externalizer:
+
+.. doctest::
+
+   >>> trigger_delivery()
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.body)
+   {"Class": "Folder", "Length": 0}
+
+Setting Headers
+---------------
+
 
 
 .. testcleanup::

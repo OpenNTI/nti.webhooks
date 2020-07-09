@@ -7,7 +7,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
+import pkg_resources
 from zope.interface import implementer
 from zope import component
 
@@ -31,8 +31,20 @@ class DefaultWebhookDialect(object):
     #: of the adapter used.
     externalizer_name = u'webhook-delivery'
 
-    def __init__(self):
-        pass
+    #: Which representation to use. Passed to
+    #: :func:`nti.externaliaztion.to_external_representation`
+    externalizer_format = externalization.representation.EXT_REPR_JSON
+
+    #: The MIME type of the body produced by :meth:`externalizeData`.
+    #: If you change the :attr:`externalizer_format`, you need to change
+    #: this value.
+    content_type = 'application/json'
+
+    #: The HTTP "User-Agent" header.
+    user_agent = 'nti.webhooks %s' % (
+        pkg_resources.require('nti.webhooks')[0].version,
+    )
+
 
     def produce_payload(self, data, event):
         """
@@ -75,6 +87,8 @@ class DefaultWebhookDialect(object):
 
     def externalizeData(self, data, event):
         payload = self.produce_payload(data, event)
-        ext_data = externalization.to_external_representation(payload,
-                                                              name=self.externalizer_name)
+        ext_data = externalization.to_external_representation(
+            payload,
+            ext_format=self.externalizer_format,
+            name=self.externalizer_name)
         return ext_data

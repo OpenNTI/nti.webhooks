@@ -4,6 +4,8 @@
  Glossary
 ==========
 
+.. currentmodule:: nti.webhooks.interfaces
+
 .. glossary::
    :sorted:
 
@@ -19,7 +21,7 @@
       security restrictions to apply. It also has a :term:`delivery
       history`.
 
-      .. seealso:: :class:`~.IWebhookSubscription`
+      .. seealso:: :class:`IWebhookSubscription`
 
    trigger
       An :class:`zope.interface.interfaces.IObjectEvent`, when
@@ -41,3 +43,9 @@
       Of a subscription: Does the subscription apply to some piece of
       data, including permission checks? Only active subscriptions
       should be applicable.
+
+   dialect
+      A customization point for a subscription. A dialect is
+      used to create and populate the HTTP request.
+
+      .. seealso:: :class:`IWebhookDialect` and :class:`nti.webhooks.dialect.DefaultWebhookDialect`
