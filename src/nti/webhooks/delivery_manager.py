@@ -32,31 +32,37 @@ class _TrivialShipmentInfo(ShipmentInfo):
 
     def __init__(self, subscriptions_and_attempts):
         # This doesn't handle persistent objects.
-        self._sub_and_attempts = list(subscriptions_and_attempts)
+
+        # Sort them by URL so that requests to the same host go together;
+        # this may help with HTTP keepalive/pipeline
+        self._sub_and_attempts = sorted(subscriptions_and_attempts,
+                                        key=lambda sub_attempt: sub_attempt[0].to)
 
     def deliver(self):
         # pylint:disable=broad-except
-        for sub, attempt in self._sub_and_attempts:
-            attempt.request.createdTime = time.time()
-            try:
-                response = requests.post(sub.to, data=attempt.payload_data)
-            except Exception as ex:
-                logger.exception("Failed to deliver for attempt %s/%s", sub, attempt)
-                attempt.response = None
-                attempt.status = 'failed'
-                attempt.message = str(ex)
-                continue
+        with requests.Session() as http_session:
+            for sub, attempt in self._sub_and_attempts:
+                attempt.request.createdTime = time.time()
+                try:
+                    prepared_request = sub.dialect.prepareRequest(http_session, sub, attempt)
+                    response = http_session.send(prepared_request)
+                except Exception as ex:
+                    logger.exception("Failed to deliver for attempt %s/%s", sub, attempt)
+                    attempt.response = None
+                    attempt.status = 'failed'
+                    attempt.message = str(ex)
+                    continue
 
-            attempt.status = 'successful' if response.ok else 'failed'
-            attempt.message = u'%s %s' % (response.status_code, response.reason)
+                attempt.status = 'successful' if response.ok else 'failed'
+                attempt.message = u'%s %s' % (response.status_code, response.reason)
 
-            try:
-                self._fill_req_resp_from_request(attempt, response)
-                # This is generally a programming error, probably an encoding something
-                # or other.
-            except Exception as ex:
-                logger.exception("Failed to parse response for attempt %s/%s", sub, attempt)
-                attempt.message = str(ex)
+                try:
+                    self._fill_req_resp_from_request(attempt, response)
+                    # This is generally a programming error, probably an encoding something
+                    # or other.
+                except Exception as ex:
+                    logger.exception("Failed to parse response for attempt %s/%s", sub, attempt)
+                    attempt.message = str(ex)
 
     if str is bytes:
         def _dict_to_text(self, headers):

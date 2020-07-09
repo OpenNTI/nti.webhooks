@@ -314,7 +314,8 @@ We can see details about the request that went on the wire:
     'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
     'Content-Length': '94',
-    'User-Agent': '...'}
+    'Content-Type': 'application/json',
+    'User-Agent': 'nti.webhooks ...'}
    >>> print(attempt.request.body)
    {"Class": "NonExternalizableObject", "InternalType": "<class 'zope.container.folder.Folder'>"}
 

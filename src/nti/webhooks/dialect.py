@@ -11,6 +11,8 @@ import pkg_resources
 from zope.interface import implementer
 from zope import component
 
+from requests import Request
+
 from nti import externalization
 from nti.webhooks.interfaces import IWebhookDialect
 from nti.webhooks.interfaces import IWebhookPayload
@@ -45,6 +47,8 @@ class DefaultWebhookDialect(object):
         pkg_resources.require('nti.webhooks')[0].version,
     )
 
+    #: The HTTP method (verb) to use.
+    http_method = 'POST'
 
     def produce_payload(self, data, event):
         """
@@ -84,11 +88,26 @@ class DefaultWebhookDialect(object):
             return result
         return component.queryAdapter(data, IWebhookPayload, default=data, context=data)
 
-
     def externalizeData(self, data, event):
+        "See :meth:`nti.webhooks.interfaces.IWebhookDialect.externalizeData`"
         payload = self.produce_payload(data, event)
         ext_data = externalization.to_external_representation(
             payload,
             ext_format=self.externalizer_format,
             name=self.externalizer_name)
         return ext_data
+
+    def produce_headers(self, http_session, subscription, attempt):
+        headers = {
+            'Content-Type': self.content_type,
+            'User-Agent': self.user_agent
+        }
+        return headers
+
+    def prepareRequest(self, http_session, subscription, attempt):
+        "See :meth:`nti.webhooks.interfaces.IWebhookDialect.prepareRequest`"
+        headers = self.produce_headers(http_session, subscription, attempt)
+        http_request = Request(self.http_method, subscription.to,
+                               headers=headers,
+                               data=attempt.payload_data)
+        return http_session.prepare_request(http_request)

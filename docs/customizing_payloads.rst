@@ -78,7 +78,8 @@ Finally, we can look at what we actually sent. It's not too pretty.
     'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
     'Content-Length': '94',
-    'User-Agent': '...'}
+    'Content-Type': 'application/json',
+    'User-Agent': 'nti.webhooks...'}
    >>> print(attempt.request.body)
    {"Class": "NonExternalizableObject", "InternalType": "<class 'zope.container.folder.Folder'>"}
 
@@ -293,8 +294,49 @@ Now when we trigger the subscription, we use this externalizer:
    >>> print(attempt.request.body)
    {"Class": "Folder", "Length": 0}
 
+
 Setting Headers
 ---------------
+
+The dialect is also responsible for customizing aspects of the HTTP request,
+including headers, authentication, and the method. Our previous attempt used the
+default values for these things:
+
+.. doctest::
+
+   >>> print(attempt.request.method)
+   POST
+   >>> import pprint
+   >>> pprint.pprint({str(k): str(v) for k, v in attempt.request.headers.items()})
+   {'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Content-Length': '32',
+    'Content-Type': 'application/json',
+    'User-Agent': 'nti.webhooks ...'}
+
+Lets apply some simple customizations and send again.
+
+.. doctest::
+   :hide:
+
+   >>> using_mocks.add('PUT', 'https://example.com/some/path')
+
+.. doctest::
+
+   >>> TestDialect.http_method = 'PUT'
+   >>> TestDialect.user_agent = 'doctests'
+   >>> trigger_delivery()
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.method)
+   PUT
+   >>> pprint.pprint({str(k): str(v) for k, v in attempt.request.headers.items()})
+   {'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Content-Length': '32',
+    'Content-Type': 'application/json',
+    'User-Agent': 'doctests'}
 
 
 

@@ -164,7 +164,7 @@ class IWebhookPayload(Interface):
 
 class IWebhookDialect(Interface):
     """
-    Quirks for sending webhooks to specific services.
+    Provides control over what data is sent on the wire.
     """
 
     def externalizeData(data, event):
@@ -172,8 +172,33 @@ class IWebhookDialect(Interface):
         Produce the byte-string that is the externalized version of *data*
         needed to send to webhooks using this dialect.
 
+        This is called while the transaction that triggered the *event* is still
+        open and not yet committed.
+
         The default method will externalize the data using an :mod:`nti.externalization`
         externalizer named "webhook-delivery".
+        """
+
+    def prepareRequest(http_session, subscription, attempt):
+        """
+        Produce the prepared request to send.
+
+        :param requests.Session http_session: The session being used
+           to send requests. The implementation should generally
+           create a :class:`requests.Request` object, and then
+           prepare it with :meth:`requests.Session.prepare_request`
+           to combine the two.
+        :param IWebhookSubscription subscription: The subscription that
+           is being delivered.
+        :param IWebhookDeliveryAttempt attempt: The attempt being
+           sent. It will already have its ``payload_data``, which should be
+           given as the ``data`` argument to the request.
+
+        :rtype: requests.PreparedRequest
+
+        .. caution::
+
+           It may not be possible to access attributes of persistent objects
         """
 
 class IWebhookDeliveryAttemptRequest(ICreatedTime):
@@ -387,12 +412,11 @@ class IWebhookSubscription(IContainerNamesContainer):
         vocabulary="Permission Ids",
     )
 
-    # TODO: Where does specification of the request method go?
-    # Dialect or subscription?
     dialect_id = Choice(
         title=u"The ID of the `IWebhookDialect` to use",
         description=u"""
-        XXX Fill me in.
+        Dialects are named utilities. They control the authentication,
+        headers, and HTTP method.
         """,
         required=False,
         vocabulary=UtilityNames(IWebhookDialect),
