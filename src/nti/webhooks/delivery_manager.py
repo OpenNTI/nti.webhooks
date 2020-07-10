@@ -104,52 +104,90 @@ class _TrivialShipmentInfo(ShipmentInfo):
         rsp.elapsed = http_response.elapsed
 
 
+class IExecutorService(interface.Interface):
+    # pylint:disable=inherit-non-class,no-self-argument,no-method-argument
+    def submit(func):
+        """
+        Submit a job to run. Execution may or may not commence
+        in the background. Tracks tasks that have been submitted and not yet
+        finished.
+        """
+
+    def waitForPendingExecutions(timeout=None):
+        """
+        Wait for all tasks that have been submitted but not yet finished
+        to finish.
+        ``submit``, wait for them all to finish. If any one of them
+        raises an exception, this method should raise an exception.
+        """
+
+    def shutdown():
+        """
+        Stop accepting new tasks.
+        """
+
+@interface.implementer(IExecutorService)
+class ThreadPoolExecutorService(object):
+
+    def __init__(self):
+        self.pending_tasks = []
+        self.executor = futures.ThreadPoolExecutor(thread_name_prefix='WebhookDeliveryManager')
+
+    def submit(self, func):
+        future = self.executor.submit(func) # pylint:disable=no-member
+        # Thread safety: We're relying on the GIL here to make
+        # appending and removal atomic and possible across threads.
+        self.pending_tasks.append(future)
+        future.add_done_callback(self.pending_tasks.remove)
+
+    def waitForPendingExecutions(self, timeout=None):
+        # Thread safety: We're relying on the GIL to make copying the list
+        # of futures atomic. It's probably important to pass a new list here
+        # so that it doesn't mutate out from under the waiter as things finish.
+        # Note that this waits only for tasks that were already submitted.
+        t = list(self.pending_tasks)
+        done, not_done = futures.wait(t, timeout=timeout)
+        assert not not_done, not_done
+        assert len(done) == len(t), (done, t)
+        for future in done:
+            # If any of them raised an exception, re-raise it.
+            # This only gets the first exception, unfortunately.
+            future.result()
+
+    def shutdown(self):
+        self.executor.shutdown()
+
+
 @interface.implementer(IWebhookDeliveryManager)
 class DefaultDeliveryManager(Contained):
 
     def __init__(self, name):
         self.__name__ = name
         self.__parent__ = None
-        self.__tasks = []
 
     def __reduce__(self):
         return self.__name__
 
     @Lazy
-    def _pool(self):
+    def executor_service(self):
         # Delay creating a thread pool until used to allow for monkey-patching
-        # TODO: Define an interface and utility for this so that we can customize
-        # it at test time. Specifically, we want to be able to ensure we use transactions
-        # that are explicit and that clean the DB caches when done. (mock_db_trans)
-        return futures.ThreadPoolExecutor(thread_name_prefix='WebhookDeliveryManager')
+        return ThreadPoolExecutorService()
 
     def createShipmentInfo(self, subscriptions_and_attempts):
         return _TrivialShipmentInfo(subscriptions_and_attempts)
 
     def acceptForDelivery(self, shipment_info):
         assert isinstance(shipment_info, ShipmentInfo)
-        future = self._pool.submit(shipment_info.deliver) # pylint:disable=no-member
-        # Thread safety: We're relying on the GIL here to make
-        # appending and removal atomic and possible across threads.
-        self.__tasks.append(future)
-        future.add_done_callback(self.__tasks.remove)
+        self.executor_service.submit(shipment_info.deliver) # pylint:disable=no-member
 
     def waitForPendingDeliveries(self, timeout=None):
-        # Thread safety: We're relying on the GIL to make copying the list
-        # of futures atomic. It's probably important to pass a new list here
-        # so that it doesn't mutate out from under the waiter as things finish.
-        # Note that this waits only for tasks that were already submitted.
-        t = list(self.__tasks)
-        done, not_done = futures.wait(t, timeout=timeout)
-        assert not not_done, not_done
-        assert len(done) == len(t), (done, t)
+        self.executor_service.waitForPendingExecutions(timeout) # pylint:disable=no-member
 
     def _reset(self):
         # Called for test cleanup.
-        pool = self.__dict__.pop('_pool', None)
-        self.__tasks = []
-        if pool is not None:
-            pool.shutdown()
+        exec_service = self.__dict__.pop('executor_service', None)
+        if exec_service is not None:
+            exec_service.shutdown()
 
 # Name string must match variable identifier for pickling
 global_delivery_manager = DefaultDeliveryManager('global_delivery_manager')

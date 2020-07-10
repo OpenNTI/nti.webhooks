@@ -16,6 +16,7 @@ from collections import defaultdict
 from zope import component
 from zope.interface import implementer
 from transaction.interfaces import IDataManager
+from persistent.interfaces import IPersistent
 
 from nti.webhooks.interfaces import IWebhookDeliveryManager
 
@@ -95,28 +96,32 @@ class WebhookDataManager(object):
     @classmethod
     def join_transaction(cls, transaction_manager, data, event, subscriptions):
         """
-        Add the *data*, *event* and *subscriptions* to the transaction being
-        managed by the *transaction_manager*.
+        Add the *data*, *event* and *subscriptions* to the transaction
+        being managed by the *transaction_manager*.
 
-        If there is no data manager, one is created. Then the effect is the same
-        as calling :meth:`add_subscriptions`.
+        If there is no data manager, one is created. Then the effect
+        is the same as calling :meth:`add_subscriptions`.
 
-        Returns the instance of this class that was either created or already
-        joined to the transaction.
+        Returns the instance of this class that was either created or
+        already joined to the transaction.
+
+        :raises transaction.interfaces.NoTransaction: If the
+            *transaction_manager* is operating in explicit mode, and
+            has not begun a transaction.
         """
         tx = transaction_manager.get() # If not begun, this is an error.
 
         try:
             data_man = tx.data(cls)
         except KeyError:
-            data_man = cls(transaction_manager, data, event, subscriptions)
+            data_man = cls(transaction_manager, tx)
             tx.join(data_man)
             tx.set_data(cls, data_man)
-        else:
-            data_man.add_subscriptions(data, event, subscriptions)
+
+        data_man.add_subscriptions(data, event, subscriptions)
         return data_man
 
-    def __init__(self, transaction_manager, data=None, event=None, subscriptions=()):
+    def __init__(self, transaction_manager, transaction):
         """
         :param transaction_manager: The current ``ITransactionManager`` we are joining.
         :param subscriptions: A sequence of ``IWebhookSubscription`` objects to
@@ -128,9 +133,7 @@ class WebhookDataManager(object):
         self.transaction_manager = transaction_manager
         self._subscriptions = defaultdict(set)
         self._tpc_state = None
-        self.transaction = None
-        if data is not None and event is not None:
-            self.add_subscriptions(data, event, subscriptions)
+        self.transaction = transaction
 
     def add_subscriptions(self, data, event, subscriptions):
         """
@@ -145,9 +148,12 @@ class WebhookDataManager(object):
         For now, we just wind up discarding the event type and assume it's not important to the
         delivery.
         """
-        if self.transaction:
-            raise ValueError("Already in transaction")
+        # We don't enforce that you can't call this after TPC has begun.
         self._subscriptions[(data, event)].update(subscriptions)
+        for subscription in subscriptions:
+            # pylint:disable=protected-access
+            if IPersistent.providedBy(subscription) and subscription._p_jar and subscription._p_oid:
+                subscription._p_jar.register(subscription)
 
 
     # The sequence for two-phase-commit is
@@ -159,9 +165,20 @@ class WebhookDataManager(object):
     # to make any modifications during ``tpc_begin()`` (*or* work with
     # objects to have them do things during their ``__getstate__()`` or
     # other pickle methods that add new objects to the connection
-    # during object writing at ``commit()` --- but that's pretty untenable).
+    # during object writing at ``commit()`` --- but that's pretty untenable).
     # This means that we need to add our attempts, and serialize all data, which
     # is recorded as part of the attempt, at ``tpc_begin()`` time.
+    #
+    # HOWEVER: If the Connection of an object was not previously joined
+    # to the transaction, it's too late to join it in tpc_begin: The transaction
+    # itself fails that ("expected txn status 'Active' but it is 'Committing'").
+    # Thus mutating a persistent object can fail if creating the delivery attempt
+    # is the first time an object from some connection has been mutated.
+    #
+    # We fix this by pre-emptively registering subscriptions with their connection,
+    # which in turn registers with the transaction, as soon as they are added to this
+    # data manager. Another approach would be to add a before-commit transaction hook
+    # to the transaction that does the same thing.
 
     @foreign_transaction
     def tpc_begin(self, transaction):
@@ -221,7 +238,7 @@ class WebhookDataManager(object):
         self.abort(transaction)
 
     def abort(self, tranasction):
-        self.__init__(self.transaction_manager)
+        self.__init__(self.transaction_manager, None)
 
     def sortKey(self):
         return 'nti.webhooks.datamanager.WebhookDataManager'

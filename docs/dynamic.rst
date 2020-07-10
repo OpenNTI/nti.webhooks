@@ -222,12 +222,21 @@ Now we can attempt delivery to these subscriptions. They will have a
 delivery attempt recorded, and in the case of the persistent
 subscription, it will be persistent itself.
 
+.. doctest::
+   :hide:
+
+   >>> from nti.webhooks.testing import SequentialExecutorService
+   >>> from zope import component
+   >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
+   >>> component.getUtility(IWebhookDeliveryManager).executor_service = SequentialExecutorService()
+
 First, we define a helper function that will trigger and wait for the deliveries.
 
 .. doctest::
 
    >>> def trigger_delivery():
-   ...    from zope import lifecycleevent
+   ...    from zope import lifecycleevent, component
+   ...    from nti.webhooks.interfaces import IWebhookDeliveryManager
    ...    conn = tx.begin()
    ...    office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
    ...    lifecycleevent.modified(office_bob)
@@ -245,7 +254,9 @@ Next, we deliver the events, and then fetch the updated subscriptions.
    >>> subscriptions
    [<...Subscription at 0x... to='https://this_domain_does_not_exist' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
    >>> subscription = subscriptions[1]
-   >>> attempt = subscription.attempt
+   >>> attempt = subscription.pop()
+   >>> print(attempt.status)
+   'successful'
    >>> attempt.response.status_code
    200
    >>> print(attempt.request.url)

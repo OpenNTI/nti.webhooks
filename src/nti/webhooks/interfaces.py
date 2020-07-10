@@ -93,7 +93,8 @@ class IWebhookDeliveryManager(Interface):
         shipment info.
 
         For persistent subscriptions and attempts, all necessary information to complete
-        :meth:`acceptForDelivery` must be captured at this time.
+        :meth:`acceptForDelivery` must be captured at this time. The connection that created the
+        subscription and attempts must still be open, and the transaction still running.
 
         :return: A new :class:`IWebhookDeliveryManagerShipmentInfo` object.
             If the iterable is empty, this may return None or a suitable

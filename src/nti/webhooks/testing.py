@@ -7,10 +7,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from zope import interface
+
 import responses
 
 from nti.testing.zodb import mock_db_trans
 from nti.testing.zodb import ZODBLayer
+
+from nti.webhooks.delivery_manager import IExecutorService
+
 
 class UsingMocks(object):
     """
@@ -67,3 +72,23 @@ class ZODBFixture(object):
         for c in ZODBLayer.__mro__:
             if 'tearDown' in c.__dict__:
                 c.__dict__['tearDown'].__func__(c)
+
+
+@interface.implementer(IExecutorService)
+class SequentialExecutorService(object):
+    """
+    Runs tasks one at a time, and only when waited on.
+    """
+    def __init__(self):
+        self.to_run = []
+
+    def submit(self, func):
+        self.to_run.append(func)
+
+    def waitForPendingExecutions(self, timeout=None):
+        funcs, self.to_run = list(self.to_run), []
+        for func in funcs:
+            func()
+
+    def shutdown(self):
+        self.to_run = None

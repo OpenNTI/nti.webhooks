@@ -52,7 +52,9 @@ def dispatch_webhook_event(data, event):
 
     This is registered globally for ``(*, IObjectEvent)`` (TODO: It
     would be nice to make that more specific. Maybe we want to require
-    objects to implement the ``IWebhookPayload`` interface?.)
+    objects to implement an ``IWebhookPossiblePayload`` interface? Just in
+    order to cut down on the number of times this fires by default, which
+    is a LOT.)
 
     This function:
 
@@ -62,7 +64,13 @@ def dispatch_webhook_event(data, event):
       instances in the context of the *data*, which may be separate.
     - Determines if any of those actually apply to the *data*, and if so,
       joins the transaction to prepare for sending them.
+
+    .. caution::
+        This function assumes the global, thread-local transaction manager. If any
+        objects belong to ZODB connections that are using a different transaction
+        manager, this won't work.
     """
+    # TODO: I think we could actually find a differen transaction manager if we needed to.
     subscriptions = find_active_subscriptions_for(data, event)
     subscriptions = [sub for sub in subscriptions if sub.isApplicable(data)]
     if subscriptions:
