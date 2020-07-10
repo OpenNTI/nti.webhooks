@@ -34,7 +34,7 @@ class _TrivialShipmentInfo(ShipmentInfo):
         # This doesn't handle persistent objects.
 
         # Sort them by URL so that requests to the same host go together;
-        # this may help with HTTP keepalive/pipeline
+        # this may help with HTTP keepalive/pipeline?
         self._sub_and_attempts = sorted(subscriptions_and_attempts,
                                         key=lambda sub_attempt: sub_attempt[0].to)
 
@@ -124,7 +124,6 @@ class DefaultDeliveryManager(Contained):
         return futures.ThreadPoolExecutor(thread_name_prefix='WebhookDeliveryManager')
 
     def createShipmentInfo(self, subscriptions_and_attempts):
-        # TODO: Group by domain and re-use request sessions.
         return _TrivialShipmentInfo(subscriptions_and_attempts)
 
     def acceptForDelivery(self, shipment_info):

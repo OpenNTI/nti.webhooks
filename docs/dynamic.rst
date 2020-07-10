@@ -8,6 +8,7 @@
    from zope.testing import cleanup
    from nti.webhooks.testing import UsingMocks
    using_mocks = UsingMocks("POST", 'https://example.com/some/path', status=200)
+   using_mocks.add("POST", 'https://this_domain_does_not_exist', status=200)
 
 In addition to static webhook subscriptions defined in ZCML, this
 package supports dynamic webhook subscriptions created, activated,
@@ -172,15 +173,18 @@ we can still find this subscription and confirm that it is active.
 
 .. doctest::
 
+   >>> def subscriptions_for_bob(conn):
+   ...     from nti.webhooks.subscribers import find_active_subscriptions_for
+   ...     from zope.lifecycleevent import ObjectModifiedEvent
+   ...     office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
+   ...     event = ObjectModifiedEvent(office_bob)
+   ...     return find_active_subscriptions_for(event.object, event)
    >>> from zope.component import getSiteManager
    >>> getSiteManager() is office.getSiteManager()
    False
-   >>> from nti.webhooks.subscribers import find_active_subscriptions_for
-   >>> from zope.lifecycleevent import ObjectModifiedEvent
-   >>> event = ObjectModifiedEvent(office_bob)
-   >>> len(find_active_subscriptions_for(event.object, event))
+   >>> len(subscriptions_for_bob(conn))
    1
-   >>> find_active_subscriptions_for(event.object, event)[0] is subscription
+   >>> subscriptions_for_bob(conn)[0] is subscription
    True
    >>> tx.finish()
 
@@ -203,14 +207,63 @@ A static subscription registered globally is also found:
    ... </configure>
    ... """)
    >>> conn = tx.begin()
-   >>> office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
-   >>> event = ObjectModifiedEvent(office_bob)
-   >>> subscriptions = find_active_subscriptions_for(event.object, event)
+   >>> subscriptions = subscriptions_for_bob(conn)
    >>> len(subscriptions)
    2
    >>> subscriptions
    [<...Subscription at 0x... to='https://this_domain_does_not_exist' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
    >>> tx.finish()
+
+
+Delivery
+--------
+
+Now we can attempt delivery to these subscriptions. They will have a
+delivery attempt recorded, and in the case of the persistent
+subscription, it will be persistent itself.
+
+First, we define a helper function that will trigger and wait for the deliveries.
+
+.. doctest::
+
+   >>> def trigger_delivery():
+   ...    from zope import lifecycleevent
+   ...    conn = tx.begin()
+   ...    office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
+   ...    lifecycleevent.modified(office_bob)
+   ...    tx.finish()
+   ...    component.getUtility(IWebhookDeliveryManager).waitForPendingDeliveries()
+
+
+Next, we deliver the events, and then fetch the updated subscriptions.
+
+.. doctest::
+
+   >>> trigger_delivery()
+   >>> conn = tx.begin()
+   >>> subscriptions = subscriptions_for_bob(conn)
+   >>> subscriptions
+   [<...Subscription at 0x... to='https://this_domain_does_not_exist' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
+   >>> subscription = subscriptions[1]
+   >>> attempt = subscription.attempt
+   >>> attempt.response.status_code
+   200
+   >>> print(attempt.request.url)
+   https://example.com/some/path
+   >>> print(attempt.request.method)
+   POST
+   >>> import pprint
+   >>> pprint.pprint({str(k): str(v) for k, v in attempt.request.headers.items()})
+   {'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Content-Length': '94',
+    'Content-Type': 'application/json',
+    'User-Agent': 'nti.webhooks...'}
+   >>> print(attempt.request.body)
+   {"Class": "NonExternalizableObject", "InternalType": "<class 'zope.container.folder.Folder'>"}
+
+
 
 TODO
 ====
@@ -219,6 +272,7 @@ TODO
 - Add test to add new subscription when manager already exists.
 - Add subscription at higher level and find it too.
 - Actually test delivery, and persistence of the attempt.
+- Limited buffer for delivery attempts.
 
 
 .. testcleanup::
