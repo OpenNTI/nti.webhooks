@@ -2,6 +2,13 @@
  Dynamic Webhook Subscriptions
 ===============================
 
+.. testsetup::
+
+
+   from zope.testing import cleanup
+   from nti.webhooks.testing import UsingMocks
+   using_mocks = UsingMocks("POST", 'https://example.com/some/path', status=200)
+
 In addition to static webhook subscriptions defined in ZCML, this
 package supports dynamic webhook subscriptions created, activated,
 inactivated, and removed through code at runtime. Such subscriptions,
@@ -40,19 +47,6 @@ a name in the :class:`etc <zope.traversing.namespace.etc>` namespace.
 .. doctest::
    :hide:
 
-   >>> from zope.configuration import xmlconfig
-   >>> conf_context = xmlconfig.string("""
-   ... <configure
-   ...     xmlns="http://namespaces.zope.org/zope"
-   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
-   ...     >
-   ...   <include package="nti.webhooks" />
-   ...   <include package="nti.site" />
-   ...   <include package="zope.traversing" />
-   ... </configure>
-   ... """)
-   >>> from zope.component.hooks import setHooks
-   >>> setHooks()
    >>> import nti.webhooks.testing
    >>> __name__ = 'nti.webhooks.testing'
 
@@ -97,13 +91,24 @@ Now we'll create a database and store our hierarchy.
 .. doctest::
 
    >>> import transaction
-   >>> from ZODB import DB
-   >>> from ZODB.DemoStorage import DemoStorage
+   >>> from nti.webhooks.testing import ZODBFixture
+   >>> from nti.webhooks.testing import DoctestTransaction
    >>> from nti.site.hostpolicy import install_main_application_and_sites
    >>> from nti.site.testing import print_tree
-   >>> db = DB(DemoStorage())
-   >>> _ = transaction.begin()
-   >>> conn = db.open()
+   >>> ZODBFixture.setUp()
+   >>> from zope.configuration import xmlconfig
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="nti.webhooks" />
+   ...   <include package="nti.site" />
+   ...   <include package="zope.traversing" />
+   ... </configure>
+   ... """)
+   >>> tx = DoctestTransaction()
+   >>> conn = tx.begin()
    >>> root_folder, main_folder = install_main_application_and_sites(
    ...        conn,
    ...        root_alias=None, main_name='NOAA', main_alias=None)
@@ -124,9 +129,10 @@ Now we'll create a database and store our hierarchy.
                         Bob ...
                             ...
    >>> from zope.traversing import api as ztapi
-   >>> print(ztapi.getPath(office_bob))
+   >>> office_bob_path = ztapi.getPath(office_bob)
+   >>> print(office_bob_path)
    /NOAA/NWS/OUN/employees/Bob
-   >>> transaction.commit()
+   >>> tx.finish()
 
 High-level API
 ==============
@@ -140,11 +146,11 @@ frequently one we've traversed to.
 .. doctest::
 
    >>> from nti.webhooks.api import subscribe_to_resource
-   >>> _ = transaction.begin()
+   >>> conn = tx.begin()
+   >>> office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
    >>> subscription = subscribe_to_resource(office_bob, 'https://example.com/some/path')
    >>> subscription
    <...PersistentSubscription at 0x... to='https://example.com/some/path' for=nti.webhooks.testing.Employee when=IObjectEvent>
-   >>> transaction.commit()
 
 By looking at the path, we can see that a subscription manager
 containing the subscription was created at the closest enclosing site
@@ -176,6 +182,7 @@ we can still find this subscription and confirm that it is active.
    1
    >>> find_active_subscriptions_for(event.object, event)[0] is subscription
    True
+   >>> tx.finish()
 
 A static subscription registered globally is also found:
 
@@ -195,12 +202,15 @@ A static subscription registered globally is also found:
    ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent" />
    ... </configure>
    ... """)
+   >>> conn = tx.begin()
+   >>> office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
    >>> event = ObjectModifiedEvent(office_bob)
    >>> subscriptions = find_active_subscriptions_for(event.object, event)
    >>> len(subscriptions)
    2
    >>> subscriptions
    [<...Subscription at 0x... to='https://this_domain_does_not_exist' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
+   >>> tx.finish()
 
 TODO
 ====
@@ -208,10 +218,12 @@ TODO
 - Removing subscriptions when principals are removed.
 - Add test to add new subscription when manager already exists.
 - Add subscription at higher level and find it too.
+- Actually test delivery, and persistence of the attempt.
 
 
 .. testcleanup::
 
    #using_mocks.finish()
+   ZODBFixture.tearDown()
    from zope.testing import cleanup
    cleanup.cleanUp()

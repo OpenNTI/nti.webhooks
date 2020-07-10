@@ -38,6 +38,9 @@ def subscribe_to_resource(resource, to, for_=None,
        interfaces.
     """
     if for_ is None:
+        # XXX: Probably want to direct this through an adapter
+        # so that it can easily be customized. Probably by default we'd
+        # get way too specific an interface.
         for_ = providedBy(resource)
 
     site_manager = getSiteManager(resource)

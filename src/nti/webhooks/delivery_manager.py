@@ -71,6 +71,8 @@ class _TrivialShipmentInfo(ShipmentInfo):
         _dict_to_text = dict
 
     def _fill_req_resp_from_request(self, attempt, http_response):
+        # This will ultimately run in a transaction of its own with access to the
+        # database.
         http_request = http_response.request # type: requests.PreparedRequest
         req = attempt.request
         rsp = attempt.response
@@ -115,7 +117,10 @@ class DefaultDeliveryManager(Contained):
 
     @Lazy
     def _pool(self):
-        # Delay creating a thread pool until used for monkey-patching
+        # Delay creating a thread pool until used to allow for monkey-patching
+        # TODO: Define an interface and utility for this so that we can customize
+        # it at test time. Specifically, we want to be able to ensure we use transactions
+        # that are explicit and that clean the DB caches when done. (mock_db_trans)
         return futures.ThreadPoolExecutor(thread_name_prefix='WebhookDeliveryManager')
 
     def createShipmentInfo(self, subscriptions_and_attempts):
