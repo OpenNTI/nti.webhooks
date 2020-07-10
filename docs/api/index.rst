@@ -7,5 +7,7 @@
    interfaces
    api
    dialect
+   delivery
    subscriptions
    subscribers
+   testing

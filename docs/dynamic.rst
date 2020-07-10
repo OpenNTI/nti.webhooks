@@ -8,7 +8,7 @@
    from zope.testing import cleanup
    from nti.webhooks.testing import UsingMocks
    using_mocks = UsingMocks("POST", 'https://example.com/some/path', status=200)
-   using_mocks.add("POST", 'https://this_domain_does_not_exist', status=200)
+   using_mocks.add("POST", 'https://example.com/another/path', status=404)
 
 In addition to static webhook subscriptions defined in ZCML, this
 package supports dynamic webhook subscriptions created, activated,
@@ -78,7 +78,8 @@ First define the classes.
    >>> class Office(Employees):
    ...     pass
    >>> class Employee(Contained, Persistent):
-   ...    pass
+   ...    def toExternalObject(self, **kwargs):
+   ...        return self.__name__
 
 .. doctest::
    :hide:
@@ -88,6 +89,16 @@ First define the classes.
    >>> nti.webhooks.testing.Employee = Employee
 
 Now we'll create a database and store our hierarchy.
+
+.. note::
+
+   The :class:`nti.webhooks.testing.ZODBFixture` establishes a
+   global, unnamed, utility for the :class:`ZODB.interfaces.IDatabase`
+   that it opens. This is what things like ``zope.app.appsetup`` do as well;
+   your application needs to arrange for that utility to be available.
+
+   The :func:`nti.site.runner.run_job_in_site` function also has this
+   requirement.
 
 .. doctest::
 
@@ -201,7 +212,7 @@ A static subscription registered globally is also found:
    ...   <include package="zope.container" />
    ...   <include package="nti.webhooks" />
    ...   <webhooks:staticSubscription
-   ...             to="https://this_domain_does_not_exist"
+   ...             to="https://example.com/another/path"
    ...             for="nti.webhooks.testing.Employee"
    ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent" />
    ... </configure>
@@ -211,7 +222,7 @@ A static subscription registered globally is also found:
    >>> len(subscriptions)
    2
    >>> subscriptions
-   [<...Subscription at 0x... to='https://this_domain_does_not_exist' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
+   [<...Subscription at 0x... to='https://example.com/another/path' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
    >>> tx.finish()
 
 
@@ -252,11 +263,17 @@ Next, we deliver the events, and then fetch the updated subscriptions.
    >>> conn = tx.begin()
    >>> subscriptions = subscriptions_for_bob(conn)
    >>> subscriptions
-   [<...Subscription at 0x... to='https://this_domain_does_not_exist' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
-   >>> subscription = subscriptions[1]
-   >>> attempt = subscription.pop()
+   [<...Subscription at 0x... to='https://example.com/another/path' for=Employee when=IObjectModifiedEvent>, <...PersistentSubscription at 0x... to='https://example.com/some/path' ... when=IObjectEvent>]
+   >>> global_subscription = subscriptions[0]
+   >>> persistent_subscription = subscriptions[1]
+
+Our attempt at persistent delivery was successful.
+
+.. doctest::
+
+   >>> attempt = persistent_subscription.pop()
    >>> print(attempt.status)
-   'successful'
+   successful
    >>> attempt.response.status_code
    200
    >>> print(attempt.request.url)
@@ -268,13 +285,37 @@ Next, we deliver the events, and then fetch the updated subscriptions.
    {'Accept': '*/*',
     'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
-    'Content-Length': '94',
+    'Content-Length': '5',
     'Content-Type': 'application/json',
     'User-Agent': 'nti.webhooks...'}
    >>> print(attempt.request.body)
-   {"Class": "NonExternalizableObject", "InternalType": "<class 'zope.container.folder.Folder'>"}
+   "Bob"
+   >>> tx.finish()
 
+Because of the way the mock HTTP responses were set up, the
+static/global subscription delivery failed.
 
+.. doctest::
+
+   >>> attempt = global_subscription.pop()
+   >>> print(attempt.status)
+   failed
+   >>> attempt.response.status_code
+   404
+   >>> print(attempt.request.url)
+   https://example.com/another/path
+   >>> print(attempt.request.method)
+   POST
+   >>> import pprint
+   >>> pprint.pprint({str(k): str(v) for k, v in attempt.request.headers.items()})
+   {'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Content-Length': '5',
+    'Content-Type': 'application/json',
+    'User-Agent': 'nti.webhooks...'}
+   >>> print(attempt.request.body)
+   "Bob"
 
 TODO
 ====
@@ -282,13 +323,15 @@ TODO
 - Removing subscriptions when principals are removed.
 - Add test to add new subscription when manager already exists.
 - Add subscription at higher level and find it too.
-- Actually test delivery, and persistence of the attempt.
 - Limited buffer for delivery attempts.
+- Deleting subscriptions.
+- The interface/adapter to get what ``for_`` to use, instead of going directly to
+  ``providedBy``.
 
 
 .. testcleanup::
 
-   #using_mocks.finish()
+   using_mocks.finish()
    ZODBFixture.tearDown()
    from zope.testing import cleanup
    cleanup.cleanUp()
