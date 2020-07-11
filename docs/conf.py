@@ -360,12 +360,14 @@ intersphinx_mapping = {
     'https://docs.python.org/': None,
     'https://requests.readthedocs.io/en/master/': None,
     'https://zodb-docs.readthedocs.io/en/latest/': None,
+    'https://persistent.readthedocs.io/en/latest/': None,
 
     'https://zopeauthentication.readthedocs.io/en/latest/': None,
     'https://zopecomponent.readthedocs.io/en/latest/': None,
     'https://zopecontainer.readthedocs.io/en/latest/': None,
     'https://zopeinterface.readthedocs.io/en/latest/': None,
     'https://zopelifecycleevent.readthedocs.io/en/latest/': None,
+    'https://zopelocation.readthedocs.io/en/latest/': None,
     'https://zopeprincipalregistry.readthedocs.io/en/latest/': None,
     'https://zopesecurity.readthedocs.io/en/latest/': None,
     'https://zopesite.readthedocs.io/en/latest/': None,
@@ -373,6 +375,7 @@ intersphinx_mapping = {
 
     'https://ntitesting.readthedocs.io/en/latest/': None,
     'https://ntischema.readthedocs.io/en/latest/': None,
+    'https://ntisite.readthedocs.io/en/latest/': None,
 }
 
 extlinks = {'issue': ('https://github.com/NextThought/nti.webhooks/issues/%s',

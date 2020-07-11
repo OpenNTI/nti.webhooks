@@ -13,7 +13,6 @@ from zope.interface import Interface
 
 from zope.security.zcml import Permission
 
-from nti.webhooks.subscriptions import Subscription
 from nti.webhooks.subscriptions import getGlobalSubscriptionManager
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks._schema import ObjectEventInterface
@@ -64,8 +63,7 @@ class IStaticSubscriptionDirective(Interface):
 
 
 def _static_subscription_action(subscription_kwargs):
-    subscription = Subscription(**subscription_kwargs)
-    getGlobalSubscriptionManager().addSubscription(subscription)
+    getGlobalSubscriptionManager().createSubscription(**subscription_kwargs)
 
 def static_subscription(context, **kwargs):
     to = kwargs.pop('to')
@@ -88,7 +86,6 @@ def static_subscription(context, **kwargs):
     context.action(
         # No conflicts. You can register as many identical hooks
         # as you want.
-        # TODO: What makes the most sense?
         discriminator=None,
         callable=_static_subscription_action,
         args=(subscription_kwargs,)

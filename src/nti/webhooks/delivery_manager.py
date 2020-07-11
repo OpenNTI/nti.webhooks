@@ -14,8 +14,14 @@ from concurrent import futures
 import requests
 
 from zope import interface
+from zope import component
 from zope.container.contained import Contained
 from zope.cachedescriptors.property import Lazy
+
+from persistent.interfaces import IPersistent
+from ZODB.interfaces import IDatabase
+
+from nti.transactions.transactions import TransactionLoop
 
 from nti.webhooks.interfaces import IWebhookDeliveryManager
 from nti.webhooks.interfaces import IWebhookDeliveryManagerShipmentInfo
@@ -24,53 +30,180 @@ logger = __import__('logging').getLogger(__name__)
 
 text_type = type(u'')
 
+
+class _RunJobWithDatabase(TransactionLoop):
+    _connection = None
+
+    def run_handler(self, *args, **kwargs):
+        return self.handler(self._connection, *args, **kwargs)
+
+    def setUp(self):
+        db = component.getUtility(IDatabase)
+        self._connection = db.open()
+
+    def tearDown(self):
+        if self._connection is not None:
+            try:
+                self._connection.close()
+            finally:
+                self._connection = None
+
+
+class _PersistentAttemptGetter(object):
+    __slots__ = (
+        'oid',
+        'database_name',
+        'dialect',
+        'to',
+        'payload_data',
+    )
+
+    def __init__(self, sub, attempt):
+        self.oid = attempt._p_oid
+        self.database_name = attempt._p_jar.db().database_name
+        self.dialect = sub.dialect
+        self.to = sub.to
+        self.payload_data = attempt.payload_data
+
+    def __call__(self, connection):
+        return connection.get_connection(self.database_name).get(self.oid)
+
+
+class _TrivialAttemptGetter(object):
+    __slots__ = (
+        'sub',
+        'attempt',
+    )
+
+    def __init__(self, sub, attempt):
+        self.sub = sub
+        self.attempt = attempt
+
+    @property
+    def dialect(self):
+        return self.sub.dialect
+
+    @property
+    def to(self):
+        return self.sub.to
+
+    @property
+    def payload_data(self):
+        return self.attempt.payload_data
+
+    def __call__(self, connection):
+        return self.attempt
+
+
+class _AttemptResult(object):
+    __slots__ = (
+        'createdTime',
+        # attempt_getter is a callable(connection) that returns the attempt object.
+        # For non-persistent attempts, this can be a simple closure;
+        # for persistent attempts, it needs to be more complex.
+        'attempt_getter',
+        'http_response',
+        'exception_string',
+    )
+
+    def __init__(self, attempt_getter):
+        self.createdTime = None
+        self.attempt_getter = attempt_getter
+        self.http_response = None
+        self.exception_string = None
+
+
 @interface.implementer(IWebhookDeliveryManagerShipmentInfo)
 class ShipmentInfo(object):
-    pass
-
-class _TrivialShipmentInfo(ShipmentInfo):
 
     def __init__(self, subscriptions_and_attempts):
-        # This doesn't handle persistent objects.
-
         # Sort them by URL so that requests to the same host go together;
-        # this may help with HTTP keepalive/pipeline
+        # this may help with HTTP keepalive/pipeline?
         self._sub_and_attempts = sorted(subscriptions_and_attempts,
                                         key=lambda sub_attempt: sub_attempt[0].to)
+        self._results = []
+        self._had_persistent = False
+        for sub, attempt in self._sub_and_attempts:
+            if IPersistent.providedBy(attempt):
+                self._had_persistent = True
+                getter = _PersistentAttemptGetter(sub, attempt)
+            else:
+                getter = _TrivialAttemptGetter(sub, attempt)
+            result = _AttemptResult(getter)
+            self._results.append(result)
 
     def deliver(self):
-        # pylint:disable=broad-except
+        # Collects _AttemptResult objects.
         with requests.Session() as http_session:
-            for sub, attempt in self._sub_and_attempts:
-                attempt.request.createdTime = time.time()
+            # We can't access any attributes of sub or attempt here, they may be
+            # persistent and we're not in a transaction or having an open connection.
+            for result in self._results:
+                result.createdTime = time.time()
                 try:
-                    prepared_request = sub.dialect.prepareRequest(http_session, sub, attempt)
+                    prepared_request = result.attempt_getter.dialect.prepareRequest(
+                        http_session,
+                        # Use the attempt_getter as a proxy for the
+                        # subscription/attempt, since, if persistent,
+                        # they cannot be accessed directly. Always do
+                        # this, even if they're not persistent, for
+                        # consistency. NOTE: These are not complete
+                        # proxies, only providing the things that have
+                        # been proven to be needed. Should probably
+                        # introduce interfaces for this and update the
+                        # prepareRequest method description.
+                        result.attempt_getter,
+                        result.attempt_getter)
                     response = http_session.send(prepared_request)
-                except Exception as ex:
-                    logger.exception("Failed to deliver for attempt %s/%s", sub, attempt)
-                    attempt.response = None
-                    attempt.status = 'failed'
-                    attempt.message = str(ex)
-                    continue
+                except Exception as ex: # pylint:disable=broad-except
+                    # Remember, cannot access persistent attributes
+                    logger.exception("Failed to deliver for hook to %s", result.attempt_getter.to)
+                    result.exception_string = str(ex)
+                else:
+                    result.http_response = response
 
-                attempt.status = 'successful' if response.ok else 'failed'
-                attempt.message = u'%s %s' % (response.status_code, response.reason)
+        # Now open the database long enough to store the results. We
+        # don't use any site here, so per-site configuration for
+        # things like event handlers isn't possible. TODO: We probably could,
+        # we could look up the hierarchy of the attempt and put it in
+        # the first site we find that way.
+        if self._had_persistent:
+            # ``had_persistent`` may be a worthless optimization, but it
+            # simplifies some test scenarios a bit during initial bring-up
+            runner = _RunJobWithDatabase(self._process_results)
+            runner(self._results)
+        else:
+            self._process_results(None, self._results)
 
+    @classmethod
+    def _process_results(cls, connection, results):
+        for result in results:
+            attempt = result.attempt_getter(connection)
+            attempt.request.createdTime = result.createdTime
+            if result.exception_string:
+                attempt.response = None
+                attempt.status = 'failed'
+                attempt.message = result.exception_string
+            else:
                 try:
-                    self._fill_req_resp_from_request(attempt, response)
+                    cls._fill_req_resp_from_request(attempt, result.http_response)
                     # This is generally a programming error, probably an encoding something
                     # or other.
-                except Exception as ex:
-                    logger.exception("Failed to parse response for attempt %s/%s", sub, attempt)
+                except Exception as ex: # pylint:disable=broad-except
+                    logger.exception("Failed to parse response for attempt %s", attempt)
                     attempt.message = str(ex)
 
     if str is bytes:
-        def _dict_to_text(self, headers):
+        @staticmethod
+        def _dict_to_text(headers):
             return {text_type(k): text_type(v) for k, v in headers.iteritems()}
     else:
         _dict_to_text = dict
 
-    def _fill_req_resp_from_request(self, attempt, http_response):
+    @classmethod
+    def _fill_req_resp_from_request(cls, attempt, http_response):
+        attempt.status = 'successful' if http_response.ok else 'failed'
+        attempt.message = u'%s %s' % (http_response.status_code, http_response.reason)
+
         http_request = http_response.request # type: requests.PreparedRequest
         req = attempt.request
         rsp = attempt.response
@@ -93,13 +226,71 @@ class _TrivialShipmentInfo(ShipmentInfo):
         # and didn't find anything that needed to be dropped.
         #
         # We'll know more as we make real-life deliveries.
-        req.headers = self._dict_to_text(http_request.headers)
+        req.headers = cls._dict_to_text(http_request.headers)
 
         rsp.status_code = http_response.status_code
         rsp.reason = text_type(http_response.reason)
-        rsp.headers = self._dict_to_text(http_response.headers)
+        rsp.headers = cls._dict_to_text(http_response.headers)
         rsp.content = http_response.text # XXX: Catch decoding errors?
         rsp.elapsed = http_response.elapsed
+
+
+class IExecutorService(interface.Interface):
+    """
+    Internal interface for testing. See :class:`nti.webhooks.testing.SequentialExecutorService`
+    for the alternate implementation.
+    """
+    # pylint:disable=inherit-non-class,no-self-argument,no-method-argument
+    def submit(func):
+        """
+        Submit a job to run. Execution may or may not commence
+        in the background. Tracks tasks that have been submitted and not yet
+        finished.
+        """
+
+    def waitForPendingExecutions(timeout=None):
+        """
+        Wait for all tasks that have been submitted but not yet finished
+        to finish.
+        ``submit``, wait for them all to finish. If any one of them
+        raises an exception, this method should raise an exception.
+        """
+
+    def shutdown():
+        """
+        Stop accepting new tasks.
+        """
+
+@interface.implementer(IExecutorService)
+class ThreadPoolExecutorService(object):
+
+    def __init__(self):
+        self.pending_tasks = []
+        self.executor = futures.ThreadPoolExecutor(thread_name_prefix='WebhookDeliveryManager')
+
+    def submit(self, func):
+        future = self.executor.submit(func) # pylint:disable=no-member
+        # Thread safety: We're relying on the GIL here to make
+        # appending and removal atomic and possible across threads.
+        self.pending_tasks.append(future)
+        future.add_done_callback(self.pending_tasks.remove)
+
+    def waitForPendingExecutions(self, timeout=None):
+        # Thread safety: We're relying on the GIL to make copying the list
+        # of futures atomic. It's probably important to pass a new list here
+        # so that it doesn't mutate out from under the waiter as things finish.
+        # Note that this waits only for tasks that were already submitted.
+        t = list(self.pending_tasks)
+        done, not_done = futures.wait(t, timeout=timeout)
+        assert not not_done, not_done
+        assert len(done) == len(t), (done, t)
+        for future in done:
+            # If any of them raised an exception, re-raise it.
+            # This only gets the first exception, unfortunately.
+            future.result()
+
+    def shutdown(self):
+        self.executor.shutdown()
 
 
 @interface.implementer(IWebhookDeliveryManager)
@@ -108,44 +299,30 @@ class DefaultDeliveryManager(Contained):
     def __init__(self, name):
         self.__name__ = name
         self.__parent__ = None
-        self.__tasks = []
 
     def __reduce__(self):
         return self.__name__
 
     @Lazy
-    def _pool(self):
-        # Delay creating a thread pool until used for monkey-patching
-        return futures.ThreadPoolExecutor(thread_name_prefix='WebhookDeliveryManager')
+    def executor_service(self):
+        # Delay creating a thread pool until used to allow for monkey-patching
+        return ThreadPoolExecutorService()
 
     def createShipmentInfo(self, subscriptions_and_attempts):
-        # TODO: Group by domain and re-use request sessions.
-        return _TrivialShipmentInfo(subscriptions_and_attempts)
+        return ShipmentInfo(subscriptions_and_attempts)
 
     def acceptForDelivery(self, shipment_info):
         assert isinstance(shipment_info, ShipmentInfo)
-        future = self._pool.submit(shipment_info.deliver) # pylint:disable=no-member
-        # Thread safety: We're relying on the GIL here to make
-        # appending and removal atomic and possible across threads.
-        self.__tasks.append(future)
-        future.add_done_callback(self.__tasks.remove)
+        self.executor_service.submit(shipment_info.deliver) # pylint:disable=no-member
 
     def waitForPendingDeliveries(self, timeout=None):
-        # Thread safety: We're relying on the GIL to make copying the list
-        # of futures atomic. It's probably important to pass a new list here
-        # so that it doesn't mutate out from under the waiter as things finish.
-        # Note that this waits only for tasks that were already submitted.
-        t = list(self.__tasks)
-        done, not_done = futures.wait(t, timeout=timeout)
-        assert not not_done, not_done
-        assert len(done) == len(t), (done, t)
+        self.executor_service.waitForPendingExecutions(timeout) # pylint:disable=no-member
 
     def _reset(self):
         # Called for test cleanup.
-        pool = self.__dict__.pop('_pool', None)
-        self.__tasks = []
-        if pool is not None:
-            pool.shutdown()
+        exec_service = self.__dict__.pop('executor_service', None)
+        if exec_service is not None:
+            exec_service.shutdown()
 
 # Name string must match variable identifier for pickling
 global_delivery_manager = DefaultDeliveryManager('global_delivery_manager')

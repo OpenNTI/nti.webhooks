@@ -11,6 +11,7 @@ from __future__ import print_function
 from zope import component
 from zope.interface import implementer
 from zope.component.globalregistry import BaseGlobalComponents
+from zope.component.persistentregistry import PersistentComponents
 
 from zope.authentication.interfaces import IAuthentication
 from zope.authentication.interfaces import IUnauthenticatedPrincipal
@@ -19,7 +20,6 @@ from zope.authentication.interfaces import PrincipalLookupError
 from zope.security.interfaces import IPermission
 from zope.security.management import newInteraction
 from zope.security.management import queryInteraction
-from zope.security.management import getInteraction
 from zope.security.management import endInteraction
 from zope.security.management import checkPermission
 from zope.security.testing import Participation
@@ -147,7 +147,6 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             else:
                 endInteraction()
 
-
     @CachedProperty('dialect_id')
     def dialect(self):
         # Find the dialect with the given name, using our location
@@ -197,7 +196,36 @@ class PersistentSubscription(Subscription, Persistent):
     def _new_deliveryAttempt(self):
         return PersistentWebhookDeliveryAttempt()
 
-    # XXX: _p_repr.
+    def __repr__(self):
+        return Persistent.__repr__(self)
+
+    def _p_repr(self):
+        return Subscription.__repr__(self)
+
+@implementer(IWebhookSubscriptionManager)
+class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
+
+
+    def __init__(self):
+        super(PersistentWebhookSubscriptionManager, self).__init__()
+        self.registry = self._make_registry()
+
+    def _make_registry(self):
+        return PersistentComponents()
+
+    def _new_Subscription(self, **kwargs):
+        return PersistentSubscription(**kwargs)
+
+    def createSubscription(self, **kwargs):
+        subscription = self._new_Subscription(**kwargs)
+        name_chooser = INameChooser(self)
+        name = name_chooser.chooseName('', subscription) # pylint:disable=too-many-function-args,assignment-from-no-return
+        self[name] = subscription
+
+        self.registry.registerHandler(subscription, (subscription.for_, subscription.when),
+                                      event=False)
+        return subscription
+
 
 class GlobalSubscriptionComponents(BaseGlobalComponents):
     """
@@ -206,25 +234,23 @@ class GlobalSubscriptionComponents(BaseGlobalComponents):
 
 global_subscription_registry = GlobalSubscriptionComponents('global_subscription_registry')
 
-@implementer(IWebhookSubscriptionManager)
-class GlobalWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
+
+class GlobalWebhookSubscriptionManager(PersistentWebhookSubscriptionManager):
 
     def __init__(self, name):
         super(GlobalWebhookSubscriptionManager, self).__init__()
-        self.registry = global_subscription_registry
         self.__name__ = name
+
+    def _make_registry(self):
+        return global_subscription_registry
+
+    def _new_Subscription(self, **kwargs):
+        return Subscription(**kwargs)
 
     def __reduce__(self):
         # The global manager is pickled as a global object.
         return self.__name__
 
-    def addSubscription(self, subscription):
-        name_chooser = INameChooser(self)
-        name = name_chooser.chooseName('', subscription) # pylint:disable=too-many-function-args,assignment-from-no-return
-        self[name] = subscription
-
-        self.registry.registerHandler(subscription, (subscription.for_, subscription.when),
-                                      event=False)
 
 # The name string must match the variable name to pickle correctly
 global_subscription_manager = GlobalWebhookSubscriptionManager('global_subscription_manager')

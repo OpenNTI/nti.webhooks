@@ -32,15 +32,15 @@ def find_active_subscriptions_for(data, event):
     # the ``__bases__`` of the site manager itself to walk up and find only the next utility.
     subscriptions = []
     provided = [providedBy(data), providedBy(event)]
-    last_sub_manager = None
+    seen_managers = set()
     for context in None, data:
         # A context of None means to use the current site manager.
         sub_managers = component.getUtilitiesFor(IWebhookSubscriptionManager, context)
         for _name, sub_manager in sub_managers:
-            if sub_manager is last_sub_manager:
+            if sub_manager in seen_managers:
                 # De-dup.
                 continue
-            last_sub_manager = sub_manager
+            seen_managers.add(sub_manager)
             local_subscriptions = sub_manager.registry.adapters.subscriptions(provided, None)
             subscriptions.extend(local_subscriptions)
     return subscriptions
@@ -52,7 +52,9 @@ def dispatch_webhook_event(data, event):
 
     This is registered globally for ``(*, IObjectEvent)`` (TODO: It
     would be nice to make that more specific. Maybe we want to require
-    objects to implement the ``IWebhookPayload`` interface?.)
+    objects to implement an ``IWebhookPossiblePayload`` interface? Just in
+    order to cut down on the number of times this fires by default, which
+    is a LOT.)
 
     This function:
 
@@ -62,7 +64,13 @@ def dispatch_webhook_event(data, event):
       instances in the context of the *data*, which may be separate.
     - Determines if any of those actually apply to the *data*, and if so,
       joins the transaction to prepare for sending them.
+
+    .. caution::
+        This function assumes the global, thread-local transaction manager. If any
+        objects belong to ZODB connections that are using a different transaction
+        manager, this won't work.
     """
+    # TODO: I think we could actually find a differen transaction manager if we needed to.
     subscriptions = find_active_subscriptions_for(data, event)
     subscriptions = [sub for sub in subscriptions if sub.isApplicable(data)]
     if subscriptions:

@@ -67,6 +67,7 @@ setup(
         'zope.componentvocabulary',
         'zope.vocabularyregistry',
         'zope.site',
+        'nti.site',
         'nti.externalization >= 2.0.0', # Consistent interface resolution order
         'nti.schema',
         'setuptools',

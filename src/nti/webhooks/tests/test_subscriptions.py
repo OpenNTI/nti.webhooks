@@ -11,8 +11,11 @@ from __future__ import print_function
 import unittest
 from hamcrest import assert_that
 from hamcrest import is_
+from hamcrest import is_not
 from hamcrest import same_instance
 from hamcrest import has_properties
+
+from zope import component
 
 from nti.webhooks import subscriptions
 
@@ -31,3 +34,10 @@ class TestGlobalWebhookSubscriptionManager(unittest.TestCase):
         assert_that(gsm_2.registry,
                     has_properties(adapters=same_instance(gsm.registry.adapters),
                                    utilities=same_instance(gsm.registry.utilities)))
+
+        site_man = component.getGlobalSiteManager()
+        assert_that(gsm_2.registry,
+                    has_properties(
+                        adapters=is_not(same_instance(site_man.adapters)),
+                        utilities=is_not(same_instance(site_man.utilities))
+                    ))

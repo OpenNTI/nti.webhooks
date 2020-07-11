@@ -93,7 +93,8 @@ class IWebhookDeliveryManager(Interface):
         shipment info.
 
         For persistent subscriptions and attempts, all necessary information to complete
-        :meth:`acceptForDelivery` must be captured at this time.
+        :meth:`acceptForDelivery` must be captured at this time. The connection that created the
+        subscription and attempts must still be open, and the transaction still running.
 
         :return: A new :class:`IWebhookDeliveryManagerShipmentInfo` object.
             If the iterable is empty, this may return None or a suitable
@@ -455,8 +456,14 @@ class IWebhookSubscriptionManager(IContainerNamesContainer):
     """
     contains(IWebhookSubscription)
 
-    def addSubscription(subscription):
+    def createSubscription(to=None, for_=None, when=None,
+                           owner_id=None, permission_id=None,
+                           dialect=None):
         """
-        XXX: Document me.
-        :param subscription: A `IWebhookSubscription`.
+        Create and store a new ``IWebhookSubscription`` in this manager.
+
+        The new subscription is returned. It is a child of this object.
+
+        All arguments are by keyword, and have the same meaning as
+        the attributes documented.
         """
