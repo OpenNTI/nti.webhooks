@@ -45,13 +45,6 @@ this API, persistent webhook subscription managers are stored in the
 site manager using :func:`nti.site.localutility.install_utility` with
 a name in the :class:`etc <zope.traversing.namespace.etc>` namespace.
 
-.. doctest::
-   :hide:
-
-   >>> import nti.webhooks.testing
-   >>> __name__ = 'nti.webhooks.testing'
-
-
 Setup
 =====
 
@@ -60,33 +53,14 @@ paths. Following the example from the main documentation, we'll create
 a department named "NWS" and office named "OUN", plus some people
 in each one. The department and office will be sites, with a site manager.
 
-First define the classes.
+First define the classes. These are stored in a module named ``employees``.
+
+.. literalinclude:: employees.py
 
 .. doctest::
 
-   >>> from persistent import Persistent
-   >>> from zope.container.contained import Contained
-   >>> from zope.site.folder import Folder
-   >>> from zope.site import LocalSiteManager
-   >>> class Employees(Folder):
-   ...    def __init__(self):
-   ...        Folder.__init__(self)
-   ...        self['employees'] = Folder()
-   ...        self.setSiteManager(LocalSiteManager(self))
-   >>> class Department(Employees):
-   ...     pass
-   >>> class Office(Employees):
-   ...     pass
-   >>> class Employee(Contained, Persistent):
-   ...    def toExternalObject(self, **kwargs):
-   ...        return self.__name__
+   >>> from employees import Department, Office, Employee
 
-.. doctest::
-   :hide:
-
-   >>> nti.webhooks.testing.Department = Department
-   >>> nti.webhooks.testing.Office = Office
-   >>> nti.webhooks.testing.Employee = Employee
 
 Now we'll create a database and store our hierarchy.
 
@@ -100,6 +74,11 @@ Now we'll create a database and store our hierarchy.
    The :func:`nti.site.runner.run_job_in_site` function also has this
    requirement.
 
+Begin with some common imports and set up the required packages and fixture.
+
+.. The fixture will run zope.testing.cleanup so it needs to happen
+   before the configuration.
+
 .. doctest::
 
    >>> import transaction
@@ -107,8 +86,9 @@ Now we'll create a database and store our hierarchy.
    >>> from nti.webhooks.testing import DoctestTransaction
    >>> from nti.site.hostpolicy import install_main_application_and_sites
    >>> from nti.site.testing import print_tree
-   >>> ZODBFixture.setUp()
+   >>> from zope.traversing import api as ztapi
    >>> from zope.configuration import xmlconfig
+   >>> ZODBFixture.setUp()
    >>> conf_context = xmlconfig.string("""
    ... <configure
    ...     xmlns="http://namespaces.zope.org/zope"
@@ -120,6 +100,16 @@ Now we'll create a database and store our hierarchy.
    ...   <include package="zope.traversing" />
    ... </configure>
    ... """)
+
+Next, start a transaction and get a database connection, and add our
+objects. We can show that we have a traversable path to the lowest
+level object; we'll use this path to refer to that object in the
+future (we don't keep a reference to the actual object because we'll
+be opening and closing multiple transactions).
+
+.. doctest::
+
+
    >>> tx = DoctestTransaction()
    >>> conn = tx.begin()
    >>> root_folder, main_folder = install_main_application_and_sites(
@@ -141,7 +131,6 @@ Now we'll create a database and store our hierarchy.
                     employees ...
                         Bob ...
                             ...
-   >>> from zope.traversing import api as ztapi
    >>> office_bob_path = ztapi.getPath(office_bob)
    >>> print(office_bob_path)
    /NOAA/NWS/OUN/employees/Bob
@@ -163,12 +152,20 @@ frequently one we've traversed to.
    >>> office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
    >>> subscription = subscribe_to_resource(office_bob, 'https://example.com/some/path')
    >>> subscription
-   <...PersistentSubscription at 0x... to='https://example.com/some/path' for=nti.webhooks.testing.Employee when=IObjectEvent>
+   <...PersistentSubscription at 0x... to='https://example.com/some/path' for=employees.Employee when=IObjectEvent>
 
-By looking at the path, we can see that a subscription manager
-containing the subscription was created at the closest enclosing site
-manager. We can also traverse this path to get back to the subscription, and its
-manager:
+What Just Happened
+------------------
+
+Several things happened here. The next sections will detail them.
+
+A Subscription Manager Was Created
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First, by getting the path to the subscription, we can see that a
+subscription manager containing the subscription was created at the
+closest enclosing site manager. We can also traverse this path to get
+back to the subscription, and its manager:
 
 .. doctest::
 
@@ -179,6 +176,57 @@ manager:
    True
    >>> ztapi.traverse(root_folder, '/NOAA/NWS/OUN/++etc++site/WebhookSubscriptionManager')
    <....PersistentWebhookSubscriptionManager object at 0x...>
+
+The ``for`` Was Inferred
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The API automatically deduced the value to use for ``for``, in this
+case the same thing that ``office_bob`` provides:
+
+.. doctest::
+
+   >>> from zope.interface import providedBy
+   >>> subscription.for_
+   <implementedBy employees.Employee>
+   >>> subscription.for_.__name__
+   'employees.Employee'
+   >>> providedBy(office_bob)
+   <implementedBy employees.Employee>
+   >>> providedBy(office_bob).inherit
+   <class 'employees.Employee'>
+
+This is a complex value; because of how pickling works, it will stay
+in sync with exactly what that class actually provides.
+
+.. doctest::
+
+   >>> list(providedBy(office_bob).flattened())
+   [<InterfaceClass ...IContained>, <InterfaceClass ...ILocation>, <InterfaceClass ...IPersistent>, <InterfaceClass ...Interface>]
+   >>> import pickle
+   >>> pickle.loads(pickle.dumps(subscription.for_)) is providedBy(office_bob)
+   True
+
+
+
+The ``when`` Was Guessed
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   The value for ``when``, ``IObjectEvent``, may not be what you want.
+   This may change in the future. See :doc:`configuration` for more
+   information.
+
+.. caution::
+
+   This may change in the future. While it might be nice to have a
+   single subscription that is ``when`` any of a group of events
+   fires, the Zapier API prefers to have one subscription per event
+   type. (TODO: Confirm this.) If that's the case, then there might be
+   a higher-level concept to group related subscriptions together.
+
+The Subscription is Active
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Even though the office that contains this subscription is not the current site,
 we can still find this subscription and confirm that it is active.
@@ -200,6 +248,9 @@ we can still find this subscription and confirm that it is active.
    True
    >>> tx.finish()
 
+Relation To Static Subscriptions
+--------------------------------
+
 A static subscription registered globally is also found:
 
 .. doctest::
@@ -214,7 +265,7 @@ A static subscription registered globally is also found:
    ...   <include package="nti.webhooks" />
    ...   <webhooks:staticSubscription
    ...             to="https://example.com/another/path"
-   ...             for="nti.webhooks.testing.Employee"
+   ...             for="employees.Employee"
    ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent" />
    ... </configure>
    ... """)
@@ -227,8 +278,8 @@ A static subscription registered globally is also found:
    >>> tx.finish()
 
 
-Delivery
---------
+Delivery to Static and Dynamic Subscriptions
+--------------------------------------------
 
 Now we can attempt delivery to these subscriptions. They will have a
 delivery attempt recorded, and in the case of the persistent
