@@ -39,6 +39,7 @@ First, the imports and creation of the static subscription.
    ...   <include package="zope.component" />
    ...   <include package="zope.container" />
    ...   <include package="nti.webhooks" />
+   ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
    ...   <webhooks:staticSubscription
    ...             to="https://example.com/some/path"
    ...             for="zope.container.interfaces.IContentContainer"

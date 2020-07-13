@@ -364,6 +364,7 @@ intersphinx_mapping = {
 
     'https://zopeauthentication.readthedocs.io/en/latest/': None,
     'https://zopecomponent.readthedocs.io/en/latest/': None,
+    'https://zopeconfiguration.readthedocs.io/en/latest/': None,
     'https://zopecontainer.readthedocs.io/en/latest/': None,
     'https://zopeinterface.readthedocs.io/en/latest/': None,
     'https://zopelifecycleevent.readthedocs.io/en/latest/': None,

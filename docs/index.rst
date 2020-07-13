@@ -9,6 +9,7 @@ Contents:
    :maxdepth: 1
 
    glossary
+   configuration
    static
    security
    customizing_payloads
