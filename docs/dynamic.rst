@@ -45,6 +45,15 @@ this API, persistent webhook subscription managers are stored in the
 site manager using :func:`nti.site.localutility.install_utility` with
 a name in the :class:`etc <zope.traversing.namespace.etc>` namespace.
 
+.. rubric:: Sub-pages
+
+This page has sub-pages for specific topics.
+
+.. toctree::
+
+   dynamic/customizing_for
+
+
 Setup
 =====
 
@@ -206,6 +215,7 @@ in sync with exactly what that class actually provides.
    >>> pickle.loads(pickle.dumps(subscription.for_)) is providedBy(office_bob)
    True
 
+For instructions on customizing how this is inferred, see :doc:`dynamic/customizing_for`.
 
 
 The ``when`` Was Guessed
@@ -377,8 +387,6 @@ TODO
 - Add subscription at higher level and find it too.
 - Limited buffer for delivery attempts.
 - Deleting subscriptions.
-- The interface/adapter to get what ``for_`` to use, instead of going directly to
-  ``providedBy``.
 - Auto-deactivate subscriptions after: not finding principals, number of failed deliveries, etc.
 - Auto-copy principal from interaction when none is given.
 
