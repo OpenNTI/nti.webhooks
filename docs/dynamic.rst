@@ -379,16 +379,6 @@ static/global subscription delivery failed.
    >>> print(attempt.request.body)
    "Bob"
 
-TODO
-====
-
-- Removing subscriptions when principals are removed.
-- Add test to add new subscription when manager already exists.
-- Add subscription at higher level and find it too.
-- Limited buffer for delivery attempts.
-- Deleting subscriptions.
-- Auto-deactivate subscriptions after: not finding principals, number of failed deliveries, etc.
-- Auto-copy principal from interaction when none is given.
 
 
 .. testcleanup::
