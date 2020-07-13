@@ -35,7 +35,7 @@ from nti.schema.field import Timedelta
 
 from nti.webhooks._schema import HTTPSURL
 
-# pylint:disable=inherit-non-class,no-self-argument
+# pylint:disable=inherit-non-class,no-self-argument,no-method-argument,
 
 # TODO: Add an __all__ when this is closer to finished.
 
@@ -477,4 +477,16 @@ class IWebhookSubscriptionManager(IContainerNamesContainer):
 
         All arguments are by keyword, and have the same meaning as
         the attributes documented.
+        """
+
+
+class IWebhookResourceDiscriminator(Interface):
+    """
+    An adapter that can figure out a better ``for`` for a resource
+    than simply what it provides.
+    """
+
+    def __call__(): # pylint:disable=signature-differs
+        """
+        Return the value to use for ``for``.
         """

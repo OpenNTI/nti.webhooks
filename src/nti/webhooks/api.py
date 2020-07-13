@@ -13,7 +13,10 @@ from zope.container.interfaces import IContainer
 
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
+from nti.webhooks.interfaces import IWebhookResourceDiscriminator
 from nti.webhooks.subscriptions import PersistentWebhookSubscriptionManager
+
+
 
 def subscribe_to_resource(resource, to, for_=None,
                           when=IWebhookSubscription['when'].default,
@@ -38,10 +41,14 @@ def subscribe_to_resource(resource, to, for_=None,
        interfaces.
     """
     if for_ is None:
-        # XXX: Probably want to direct this through an adapter
-        # so that it can easily be customized. Probably by default we'd
-        # get way too specific an interface.
-        for_ = providedBy(resource)
+        # Allow users to customize this. ``providedBy`` returns something
+        # very specific, which may not at all be what we want.
+        try:
+            for_ = IWebhookResourceDiscriminator(resource)
+        except TypeError:
+            for_ = providedBy(resource)
+        else:
+            for_ = for_()
 
     site_manager = getSiteManager(resource)
     sub_name = 'WebhookSubscriptionManager'

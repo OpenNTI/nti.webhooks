@@ -23,6 +23,7 @@ import sys
 import os
 import pkg_resources
 sys.path.append(os.path.abspath('../src'))
+sys.path.insert(0, os.path.abspath('.'))
 rqmt = pkg_resources.require('nti.webhooks')[0]
 # -- General configuration ------------------------------------------------
 
