@@ -9,6 +9,7 @@ from __future__ import print_function
 
 from zope.interface import Interface
 from zope.interface import Attribute
+from zope.interface import taggedValue
 from zope.interface.interfaces import IInterface
 from zope.interface.interfaces import IObjectEvent
 
@@ -151,17 +152,27 @@ class IWebhookDestinationValidator(Interface):
         :exc:`socket.error` for unresolvable domains.
         """
 
+class IPossibleWebhookPayload(Interface):
+    """
+    Marker interface applied to objects that may have webhook
+    subscriptions defined for them.
+
+    The default configuration in ``subscribers.zcml`` loads event
+    dispatchers only for event targets that implement this interface.
+    """
+
+    taggedValue('_ext_is_marker_interface', True)
+
 
 class IWebhookPayload(Interface):
     """
-    Marker interface for objects that can automatically
-    become the payload of a webhook.
-
-    This interface is used as the default in a number of
-    places.
-
-    TODO: More docs as this evolves.
+    Adapter interface to convert an object that is a
+    target of an event (possibly a `IPossibleWebhookPayload`)
+    into the object that should actually be used as the payload.
     """
+
+    taggedValue('_ext_is_marker_interface', True)
+
 
 class IWebhookDialect(Interface):
     """

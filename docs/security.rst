@@ -89,6 +89,7 @@ that is used if the ``owner`` cannot be found at runtime:
    ...   <include package="zope.securitypolicy" />
    ...   <include package="zope.securitypolicy" file="securitypolicy.zcml" />
    ...   <include package="nti.webhooks" />
+   ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
    ...   <webhooks:staticSubscription
    ...             to="https://this_domain_does_not_exist"
    ...             for="zope.container.interfaces.IContentContainer"

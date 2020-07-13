@@ -24,8 +24,8 @@ Let's look at an example of how to use this directive from ZCML. We
 need to define the XML namespace it's in, and we need to include the
 configuration file that defines it. We also need to have the event
 dispatching provided by :mod:`zope.component` properly set up, as well
-as some other things. Including this package's configuration handles
-all of that.
+as some other things described in :doc:`configuration`. Including this
+package's configuration handles all of that.
 
 .. doctest::
 
@@ -36,6 +36,7 @@ all of that.
    ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
    ...     >
    ...   <include package="nti.webhooks" />
+   ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
    ... </configure>
    ... """, execute=False)
 
@@ -116,6 +117,7 @@ deliver a webhook.
    ...   <include package="zope.component" />
    ...   <include package="zope.container" />
    ...   <include package="nti.webhooks" />
+   ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
    ...   <webhooks:staticSubscription
    ...             to="https://this_domain_does_not_exist"
    ...             for="zope.container.interfaces.IContentContainer"
@@ -242,6 +244,7 @@ Let's reset things and look at what a successful delivery might look like.
    ...   <include package="zope.component" />
    ...   <include package="zope.container" />
    ...   <include package="nti.webhooks" />
+   ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
    ...   <webhooks:staticSubscription
    ...             to="https://example.com/some/path"
    ...             for="zope.container.interfaces.IContentContainer"

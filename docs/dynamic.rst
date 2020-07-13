@@ -115,6 +115,7 @@ Now we'll create a database and store our hierarchy.
    ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
    ...     >
    ...   <include package="nti.webhooks" />
+   ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
    ...   <include package="nti.site" />
    ...   <include package="zope.traversing" />
    ... </configure>
@@ -327,6 +328,8 @@ TODO
 - Deleting subscriptions.
 - The interface/adapter to get what ``for_`` to use, instead of going directly to
   ``providedBy``.
+- Auto-deactivate subscriptions after: not finding principals, number of failed deliveries, etc.
+- Auto-copy principal from interaction when none is given.
 
 
 .. testcleanup::

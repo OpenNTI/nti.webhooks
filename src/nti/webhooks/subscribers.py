@@ -47,25 +47,28 @@ def find_active_subscriptions_for(data, event):
 
 def dispatch_webhook_event(data, event):
     """
-    A subcriber installed globally to dispatch events to webhook
-    subscriptions.
+    A subcriber installed to dispatch events to webhook subscriptions.
 
-    This is registered globally for ``(*, IObjectEvent)`` (TODO: It
-    would be nice to make that more specific. Maybe we want to require
-    objects to implement an ``IWebhookPossiblePayload`` interface? Just in
-    order to cut down on the number of times this fires by default, which
-    is a LOT.)
+    This is usually registered in the global registry by loading
+    ``subscribers.zcml`` or ``subscribers_promiscuous.zcml``, but the
+    event and data for which it is registered may be easily
+    customized. See :doc:`/configuration` for more information.
 
     This function:
 
-    - Queries for all active subscriptions in the ``IWebhookSubscriptionManager``
-      instances in the current site hierarchy;
-    - And queries for all active subscriptions in the ``IWebhookSubscriptionManager``
-      instances in the context of the *data*, which may be separate.
-    - Determines if any of those actually apply to the *data*, and if so,
-      joins the transaction to prepare for sending them.
+        - Queries for all active subscriptions in the
+          ``IWebhookSubscriptionManager`` instances in the current
+          site hierarchy;
+
+        - And queries for all active subscriptions in the
+          ``IWebhookSubscriptionManager`` instances in the context of
+          the *data*, which may be separate.
+
+        - Determines if any of those actually apply to the *data*, and
+          if so, joins the transaction to prepare for sending them.
 
     .. caution::
+
         This function assumes the global, thread-local transaction manager. If any
         objects belong to ZODB connections that are using a different transaction
         manager, this won't work.

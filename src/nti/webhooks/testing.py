@@ -92,3 +92,12 @@ class SequentialExecutorService(object):
 
     def shutdown(self):
         self.to_run = None
+
+
+class InterestingClass(object):
+    """
+    A class we refer to (and manipulate) in documentation.
+
+    Do not depend on anything specific about this class
+    other than its existence.
+    """

@@ -37,12 +37,7 @@
     <!-- The default dialect -->
     <utility factory=".dialect.DefaultWebhookDialect" />
 
-    <!-- Global event dispatcher -->
-    <subscriber
-        for="* zope.interface.interfaces.IObjectEvent"
-        handler=".subscribers.dispatch_webhook_event"
-        trusted="true"
-        />
+    <!-- Global event dispatchers are configured in subscribers.zcml -->
 
 
 </configure>
