@@ -13,6 +13,7 @@ Contents:
    static
    security
    customizing_payloads
+   delivery_attempts
    dynamic
    api/index
    changelog
@@ -27,6 +28,9 @@ TODO
 ====
 
 - Limited buffer for delivery attempts.
+- Externalization
+- Store some extra machine info on pending requests to help determine
+  if they're still viable or should be redone.
 
 Dynamic-subscriptions only
 --------------------------
@@ -41,6 +45,9 @@ Dynamic-subscriptions only
 - Auto-copy principal from interaction when none is given.
 - What about using nti.externalizations (?) "find primary interface"
   function as a generic ``IWebhookResourceDiscriminator``?
+- Use the nti.zodb properties for the created/last modified time, as
+  appropriate.
+
 
 Thoughts on HTTP API
 --------------------
