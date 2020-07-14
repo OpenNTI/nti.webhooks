@@ -112,6 +112,9 @@ def begin_synchronous_delivery():
     from nti.webhooks.interfaces import IWebhookDeliveryManager
     component.getUtility(IWebhookDeliveryManager).executor_service = SequentialExecutorService()
 
+#: Alternate name for `begin_synchronous_delivery` that may
+#: be more descriptive in some circumstances.
+begin_deferred_delivery = begin_synchronous_delivery
 
 _current_mocks = None
 

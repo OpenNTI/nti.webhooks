@@ -4,12 +4,6 @@
 
 .. currentmodule:: nti.webhooks.interfaces
 
-.. testsetup::
-
-   from zope.testing import cleanup
-   from nti.webhooks.testing import UsingMocks
-
-
 All attempts at delivering a webhook are recorded as an object that
 implements :class:`IWebhookDeliveryAttempt`.
 For static subscriptions, these are only in memory on a single
@@ -18,26 +12,20 @@ record their history more durably are also possible.
 
 Delivery always occurs as a result of committing a transaction, and
 the resulting attempt object is stored in the corresponding
-subscription object. There are three types of delivery attempts:
-pending, unsuccessful, and successful. A pending attempt is one that
-hasn't yet been resolved, while the other two have been resolved.
+subscription object.
 
-Failed Delivery Attempts
-========================
+Types of Delivery Attempts
+==========================
 
-A delivery attempt fails when:
-
-- The subscription was :term:`active`; and
-- The subscription was :term:`applicable`; and
-- Some error occurred communicating with :term:`target`. Such errors
-  include (but are not limited to) failed DNS lookups and HTTP error
-  responses.
+There are three types of delivery attempts: pending, unsuccessful, and
+successful. A pending attempt is one that hasn't yet been resolved,
+while the other two have been resolved.
 
 Successful Delivery Attempts
-============================
+----------------------------
 
-Successful delivery attempts are more interesting. Lets look at one of
-those and describe the ``IWebhookDeliveryAttempt``. We begin by
+Successful delivery attempts are the most interesting. Lets look at one of
+those and describe the `IWebhookDeliveryAttempt`. We begin by
 defining a subscription.
 
 .. doctest::
@@ -72,7 +60,6 @@ stored in the subscription, it has a length of 0 at this time.
    >>> len(subscription)
    0
 
-
 To avoid actually trying to talk to example.com, we'll be using some mocks.
 
 .. doctest::
@@ -102,7 +89,7 @@ finish, and then we can examine our delivery attempt:
    >>> component.getUtility(IWebhookDeliveryManager).waitForPendingDeliveries()
 
 Attempt Details
----------------
+~~~~~~~~~~~~~~~
 
 The subscription now has an attempt recorded in the form of an
 ``IWebhookDeliveryAttempt``. The attempt records some basic details,
@@ -171,6 +158,71 @@ the data received from the :term:`target`.
    >>> attempt.response.elapsed
    datetime.timedelta(...)
 
+Failed Delivery Attempts
+------------------------
+
+A delivery attempt fails when:
+
+- The subscription was :term:`active`; and
+- The subscription was :term:`applicable`; and
+- Some error occurred communicating with :term:`target`. Such errors
+  include (but are not limited to) failed DNS lookups and HTTP error
+  responses.
+
+It has the same ``request`` and ``response`` attributes as successful
+attempts, but, depending on when the error occurred, one or both of
+them may be `None`.
+
+Pending Delivery Attempts
+-------------------------
+
+Pending delivery attempts are those scheduled for delivery
+(typically). The ``request`` and ``response`` attributes will always
+be `None`.
+
+
+Limits On History
+=================
+
+Only a limited number of delivery attempts are stored for any given
+subscription. Currently, a class (or instance!) attribute establishes
+this limit, but in the future this may be changed to something more
+flexible. In the future there may also be a limit of some sort
+per-principal.
+
+.. doctest::
+
+   >>> subscription.attempt_limit
+   50
+
+The limit doesn't apply to pending attempts, only to successful or
+failed attempts. We can demonstrate this by switching to deferred
+delivery, creating a bunch of attempts, and looking at the length.
+
+.. doctest::
+
+   >>> from nti.webhooks.testing import begin_deferred_delivery
+   >>> begin_deferred_delivery()
+   >>> for _ in range(100):
+   ...   _ = transaction.begin()
+   ...   lifecycleevent.created(Folder())
+   ...   transaction.commit()
+   >>> len(subscription)
+   100
+   >>> list(set(attempt.status for attempt in subscription.values()))
+   ['pending']
+
+They're all pending. Now if we deliver them, the oldest pending
+attempts will be completed, and as the newer attempts complete, they
+will replace them.
+
+.. doctest::
+
+   >>> component.getUtility(interfaces.IWebhookDeliveryManager).waitForPendingDeliveries()
+   >>> len(subscription)
+   50
+   >>> list(set(attempt.status for attempt in subscription.values()))
+   ['successful']
 
 .. testcleanup::
 
