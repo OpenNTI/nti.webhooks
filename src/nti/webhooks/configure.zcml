@@ -28,6 +28,10 @@
     <utility component=".subscriptions.global_subscription_manager"
              provides=".interfaces.IWebhookSubscriptionManager" />
 
+    <!-- Managing the size of subscription histories. -->
+    <subscriber handler=".subscriptions.prune_subscription_when_resolved"
+                trusted="true" />
+
     <!-- The default validator -->
     <utility factory=".destination_validator.DefaultDestinationValidator" />
 

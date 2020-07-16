@@ -7,6 +7,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
 
 from zope import component
 from zope.interface import implementer
@@ -30,7 +31,7 @@ from zope.container.btree import BTreeContainer
 from zope.container.constraints import checkObject
 from zope.cachedescriptors.property import CachedProperty
 
-
+from nti.zodb.containers import time_to_64bit_int
 from nti.schema.fieldproperty import createDirectFieldProperties
 from nti.schema.schema import SchemaConfigured
 
@@ -38,6 +39,8 @@ from nti.webhooks.interfaces import IWebhookDialect
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
 from nti.webhooks.interfaces import IWebhookDestinationValidator
+from nti.webhooks.interfaces import IWebhookDeliveryAttemptResolvedEvent
+
 from nti.webhooks.attempts import WebhookDeliveryAttempt
 from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
 
@@ -61,7 +64,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     to = u''
     createDirectFieldProperties(IWebhookSubscription)
 
-    MAXIMUM_LENGTH = 50
+    attempt_limit = 50
 
     def __init__(self, **kwargs):
         SchemaConfigured.__init__(self, **kwargs)
@@ -159,8 +162,6 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     def createDeliveryAttempt(self, payload_data):
         attempt = self._new_deliveryAttempt()
         attempt.payload_data = payload_data
-        name = INameChooser(self).chooseName('', attempt) # pylint:disable=too-many-function-args,assignment-from-no-return
-        self[name] = attempt
 
         # Verify the destination. Fail early
         # if it doesn't pass.
@@ -168,14 +169,22 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         try:
             validator.validateTarget(self.to)
         except Exception: # pylint:disable=broad-except
-            attempt.status = 'failed'
             # The exception value can vary; it's not intended to be presented to end
             # users as-is
             # XXX: For internal verification, we need some place to store it.
             attempt.message = (
                 u'Verification of the destination URL failed. Please check the domain.'
             )
+            attempt.status = 'failed' # This could cause pruning
 
+        # Store this once we have a final status. This could cause us to
+        # exceed our limit by one.
+
+        # Choose names that are easily sortable, since that's
+        # our iteration order.
+        now = str(time_to_64bit_int(time.time()))
+        name = INameChooser(self).chooseName(now, attempt) # pylint:disable=too-many-function-args,assignment-from-no-return
+        self[name] = attempt
         return attempt
 
     def __repr__(self):
@@ -201,6 +210,22 @@ class PersistentSubscription(Subscription, Persistent):
 
     def _p_repr(self):
         return Subscription.__repr__(self)
+
+@component.adapter(IWebhookDeliveryAttemptResolvedEvent)
+def prune_subscription_when_resolved(event):
+    # type: (IWebhookDeliveryAttemptResolvedEvent) -> None
+    attempt = event.object # type: WebhookDeliveryAttempt
+    subscription = attempt.__parent__
+    if subscription is None or len(subscription) <= subscription.attempt_limit:
+        return
+
+    for key, stored_attempt in subscription.items():
+        if stored_attempt.resolved():
+            del subscription[key]
+            if len(subscription) <= subscription.attempt_limit:
+                break
+
+
 
 @implementer(IWebhookSubscriptionManager)
 class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):

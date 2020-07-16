@@ -49,3 +49,6 @@
       used to create and populate the HTTP request.
 
       .. seealso:: :class:`IWebhookDialect` and :class:`nti.webhooks.dialect.DefaultWebhookDialect`
+
+   target
+      Of a subscription: The URL to which the HTTP request is sent.

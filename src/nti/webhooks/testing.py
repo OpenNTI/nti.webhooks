@@ -8,6 +8,7 @@ from __future__ import division
 from __future__ import print_function
 
 from zope import interface
+from zope import component
 
 import responses
 
@@ -33,7 +34,8 @@ class UsingMocks(object):
     def __init__(self, *args, **kwargs):
         self.mock = responses.RequestsMock()
         self.mock.start()
-        self.add(*args, **kwargs)
+        if args or kwargs:
+            self.add(*args, **kwargs)
 
     def __getattr__(self, name):
         return getattr(self.mock, name)
@@ -78,6 +80,8 @@ class ZODBFixture(object):
 class SequentialExecutorService(object):
     """
     Runs tasks one at a time, and only when waited on.
+
+    The preferred interface to this is :func:`begin_synchronous_delivery`.
     """
     def __init__(self):
         self.to_run = []
@@ -93,6 +97,46 @@ class SequentialExecutorService(object):
     def shutdown(self):
         self.to_run = None
 
+
+def begin_synchronous_delivery():
+    """
+    Cause the global ``IWebhookDeliveryManager`` to begin delivering
+    new shipments synchronously.
+
+    All deliveries are queued until ``waitForPendingDeliveries`` is
+    called; exceptions will be raised from that function.
+
+    This remains in effect until the test is torn down with
+    :mod:`zope.testing.cleanup`.
+    """
+    from nti.webhooks.interfaces import IWebhookDeliveryManager
+    component.getUtility(IWebhookDeliveryManager).executor_service = SequentialExecutorService()
+
+#: Alternate name for `begin_synchronous_delivery` that may
+#: be more descriptive in some circumstances.
+begin_deferred_delivery = begin_synchronous_delivery
+
+_current_mocks = None
+
+def mock_delivery_to(url, method='POST', status=200):
+    global _current_mocks # pylint:disable=global-statement
+    if _current_mocks is None:
+        _current_mocks = UsingMocks()
+    _current_mocks.add(method, url, status=status)
+
+
+def _clear_mocks():
+    global _current_mocks # pylint:disable=global-statement
+    if _current_mocks is not None:
+        _current_mocks.finish()
+    _current_mocks = None
+
+try:
+    from zope.testing import cleanup # pylint:disable=ungrouped-imports
+except ImportError:
+    pass
+else:
+    cleanup.addCleanUp(_clear_mocks)
 
 class InterestingClass(object):
     """

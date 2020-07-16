@@ -20,6 +20,8 @@ from zope.container.constraints import containers
 
 from zope.componentvocabulary.vocabulary import UtilityNames
 
+from zope.lifecycleevent.interfaces import IObjectModifiedEvent
+
 from zope.principalregistry.metadirectives import TextId
 
 from zope.schema import Field
@@ -32,6 +34,7 @@ from nti.schema.field import ValidURI as URI
 from nti.schema.field import Dict
 from nti.schema.field import Int
 from nti.schema.field import Timedelta
+from nti.schema.field import Bool
 
 from nti.webhooks._schema import HTTPSURL
 
@@ -313,6 +316,37 @@ class IWebhookDeliveryAttemptResponse(ICreatedTime):
     )
 
 
+class _StatusField(Choice):
+    def __init__(self):
+        Choice.__init__(
+            self,
+            title=u"The status of the delivery attempt.",
+            description=u"""
+            The current status of the delivery attempt.
+
+            Attempts begin in the 'pending' state, and then transition
+            to either the 'successful', or 'failed' state.
+            """,
+            values=(
+                'pending', 'successful', 'failed',
+            ),
+            required=True,
+            default='pending',
+        )
+
+    def isSuccess(self, status):
+        return status == 'successful'
+
+    def isFailure(self, status):
+        return status == 'failed'
+
+    def isPending(self, status):
+        return status == 'pending'
+
+    def isResolved(self, status):
+        return self.isFailure(status) or self.isSuccess(status)
+
+
 class IWebhookDeliveryAttempt(IContained, ILastModified):
     """
     The duration of the request/reply cycle is roughly captured
@@ -322,21 +356,7 @@ class IWebhookDeliveryAttempt(IContained, ILastModified):
     """
     containers('.IWebhookSubscription')
 
-
-    status = Choice(
-        title=u"The status of the delivery attempt.",
-        description=u"""
-        The current status of the delivery attempt.
-
-        Attempts begin in the 'pending' state, and then transition
-        to either the 'successful', or 'failed' state.
-        """,
-        values=(
-            'pending', 'successful', 'failed',
-        ),
-        required=True,
-        default='pending',
-    )
+    status = _StatusField()
 
     message = Text(
         title=u"Additional explanatory text.",
@@ -346,6 +366,52 @@ class IWebhookDeliveryAttempt(IContained, ILastModified):
     request = Object(IWebhookDeliveryAttemptRequest, required=True)
     response = Object(IWebhookDeliveryAttemptResponse, required=True)
 
+    def succeeded():
+        """Did the attempt succeed?"""
+
+    def failed():
+        """Did the attempt fail?"""
+
+    def pending():
+        """Is the attempt still pending?"""
+
+    def resolved():
+        """Has the attempt been resolved, one way or the other?"""
+
+
+###
+# delivery attempt related events
+###
+
+class IWebhookDeliveryAttemptResolvedEvent(IObjectModifiedEvent):
+    """
+    A pending webhook delivery attempt has been completed.
+
+    This is an object modified event; the object is the attempt.
+
+    This is the root of a hierarchy; more specific events
+    are in :class:`IWebhookDeliveryAttemptFailedEvent`
+    and :class:`IWebhookDeliveryAttemptSucceededEvent`.
+    """
+    succeeded = Bool(
+        title=u"Was the delivery attempt successful?"
+    )
+
+class IWebhookDeliveryAttemptFailedEvent(IWebhookDeliveryAttemptResolvedEvent):
+    """
+    A delivery attempt failed.
+
+    The ``succeeded`` attribute will be false.
+    """
+
+class IWebhookDeliveryAttemptSucceededEvent(IWebhookDeliveryAttemptResolvedEvent):
+    """
+    A delivery attempt succeeded.
+
+    The ``succeeded`` attribute will be true.
+    """
+
+
 
 class IWebhookSubscription(IContainerNamesContainer):
     """
@@ -353,6 +419,8 @@ class IWebhookSubscription(IContainerNamesContainer):
     """
     containers('.IWebhookSubscriptionManager')
     contains('.IWebhookDeliveryAttempt')
+
+    # attempt_limit is an implementation artifact, not part of the interface contract.
 
     for_ = Field(
         title=u"The type of object to attempt delivery for.",

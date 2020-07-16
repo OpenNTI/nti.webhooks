@@ -2,14 +2,6 @@
  Dynamic Webhook Subscriptions
 ===============================
 
-.. testsetup::
-
-
-   from zope.testing import cleanup
-   from nti.webhooks.testing import UsingMocks
-   using_mocks = UsingMocks("POST", 'https://example.com/some/path', status=200)
-   using_mocks.add("POST", 'https://example.com/another/path', status=404)
-
 In addition to static webhook subscriptions defined in ZCML, this
 package supports dynamic webhook subscriptions created, activated,
 inactivated, and removed through code at runtime. Such subscriptions,
@@ -86,18 +78,21 @@ Now we'll create a database and store our hierarchy.
 Begin with some common imports and set up the required packages and fixture.
 
 .. The fixture will run zope.testing.cleanup so it needs to happen
-   before the configuration.
+   before the configuration and establishing mocks.
 
 .. doctest::
 
    >>> import transaction
    >>> from nti.webhooks.testing import ZODBFixture
    >>> from nti.webhooks.testing import DoctestTransaction
+   >>> from nti.webhooks.testing import mock_delivery_to
    >>> from nti.site.hostpolicy import install_main_application_and_sites
    >>> from nti.site.testing import print_tree
    >>> from zope.traversing import api as ztapi
    >>> from zope.configuration import xmlconfig
    >>> ZODBFixture.setUp()
+   >>> mock_delivery_to('https://example.com/some/path', method='POST', status=200)
+   >>> mock_delivery_to('https://example.com/another/path', method='POST', status=404)
    >>> conf_context = xmlconfig.string("""
    ... <configure
    ...     xmlns="http://namespaces.zope.org/zope"
@@ -295,18 +290,13 @@ Now we can attempt delivery to these subscriptions. They will have a
 delivery attempt recorded, and in the case of the persistent
 subscription, it will be persistent itself.
 
-.. doctest::
-   :hide:
-
-   >>> from nti.webhooks.testing import SequentialExecutorService
-   >>> from zope import component
-   >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
-   >>> component.getUtility(IWebhookDeliveryManager).executor_service = SequentialExecutorService()
-
 First, we define a helper function that will trigger and wait for the deliveries.
+We also ensure that the deliveries happen in a deterministic order.
 
 .. doctest::
 
+   >>> from nti.webhooks.testing import begin_synchronous_delivery
+   >>> begin_synchronous_delivery()
    >>> def trigger_delivery():
    ...    from zope import lifecycleevent, component
    ...    from nti.webhooks.interfaces import IWebhookDeliveryManager
@@ -383,7 +373,6 @@ static/global subscription delivery failed.
 
 .. testcleanup::
 
-   using_mocks.finish()
    ZODBFixture.tearDown()
    from zope.testing import cleanup
    cleanup.cleanUp()

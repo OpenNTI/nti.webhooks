@@ -13,12 +13,35 @@ from persistent import Persistent
 from zope.interface import implementer
 from zope.schema.fieldproperty import createFieldProperties
 from zope.container.contained import Contained
+from zope.event import notify
+from zope.lifecycleevent import ObjectModifiedEvent
+from zope.lifecycleevent import Attributes
 
 from nti.schema.schema import SchemaConfigured
 
 from nti.webhooks.interfaces import IWebhookDeliveryAttempt
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptRequest
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptResponse
+from nti.webhooks.interfaces import IWebhookDeliveryAttemptSucceededEvent
+from nti.webhooks.interfaces import IWebhookDeliveryAttemptFailedEvent
+
+
+class WebhookDeliveryAttemptResolvedEvent(ObjectModifiedEvent):
+    _ATTR = Attributes(IWebhookDeliveryAttempt, 'status')
+    success = None
+
+    def __init__(self, attempt):
+        ObjectModifiedEvent.__init__(self, attempt, self._ATTR)
+
+@implementer(IWebhookDeliveryAttemptSucceededEvent)
+class WebhookDeliveryAttemptSucceededEvent(WebhookDeliveryAttemptResolvedEvent):
+    success = True
+
+@implementer(IWebhookDeliveryAttemptFailedEvent)
+class WebhookDeliveryAttemptFailedEvent(WebhookDeliveryAttemptResolvedEvent):
+    success = False
+
+
 
 # Requests and responses are immutable. Thus they are never
 # persistent.
@@ -38,6 +61,37 @@ class WebhookDeliveryAttemptRequest(_Base):
 class WebhookDeliveryAttemptResponse(_Base):
     __name__ = 'response'
     createFieldProperties(IWebhookDeliveryAttemptResponse)
+
+class _StatusDescriptor(object):
+    """
+    A data descriptor for the ``status`` field.
+
+    This functions similarly to a FieldPropertyStoredThroughField, in
+    that it dispatches events when the property is set. It also
+    ensures that the transition from "pending" to anything else only
+    happens once.
+    """
+
+    def __init__(self, field_property):
+        self._fp = field_property
+
+    def __get__(self, inst, klass):
+        return self._fp.__get__(inst, klass)
+
+    def __set__(self, inst, value):
+        status_field = IWebhookDeliveryAttempt['status']
+        if inst.resolved():
+            raise AttributeError("Cannot change status once set.")
+        self._fp.__set__(inst, value) # This fires IFieldUpdatedEvent
+        # Now fire our more specific event, if we've settled
+        if not status_field.isResolved(value):
+            return
+
+        if status_field.isSuccess(value):
+            notify(WebhookDeliveryAttemptSucceededEvent(inst))
+        else:
+            assert status_field.isFailure(value)
+            notify(WebhookDeliveryAttemptFailedEvent(inst))
 
 
 @implementer(IWebhookDeliveryAttempt)
@@ -63,6 +117,21 @@ class WebhookDeliveryAttempt(_Base, Contained):
             id(self),
             self.status,
         )
+
+    status = _StatusDescriptor(status)
+
+    def succeeded(self):
+        return IWebhookDeliveryAttempt['status'].isSuccess(self.status)
+
+    def failed(self):
+        return IWebhookDeliveryAttempt['status'].isFailure(self.status)
+
+    def pending(self):
+        return IWebhookDeliveryAttempt['status'].isPending(self.status)
+
+    def resolved(self):
+        return IWebhookDeliveryAttempt['status'].isResolved(self.status)
+
 
 class PersistentWebhookDeliveryAttempt(WebhookDeliveryAttempt, Persistent):
     # XXX: _p_repr
