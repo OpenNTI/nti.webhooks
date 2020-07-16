@@ -195,7 +195,7 @@ class ShipmentInfo(object):
                     # or other.
                 except Exception as ex: # pylint:disable=broad-except
                     logger.exception("Failed to parse response for attempt %s", attempt)
-                    attempt.message = str(ex)
+                    attempt.message = text_type(ex)
 
     if str is bytes:
         @staticmethod
