@@ -203,26 +203,49 @@ delivery, creating a bunch of attempts, and looking at the length.
 
    >>> from nti.webhooks.testing import begin_deferred_delivery
    >>> begin_deferred_delivery()
-   >>> for _ in range(100):
-   ...   _ = transaction.begin()
-   ...   lifecycleevent.created(Folder())
-   ...   transaction.commit()
+   >>> from nti.testing.time import time_monotonically_increases
+   >>> @time_monotonically_increases
+   ... def deliver_many():
+   ...     for _ in range(100):
+   ...       transaction.begin()
+   ...       lifecycleevent.created(Folder())
+   ...       transaction.commit()
+   >>> deliver_many()
    >>> len(subscription)
    100
    >>> list(set(attempt.status for attempt in subscription.values()))
    ['pending']
 
-They're all pending. Now if we deliver them, the oldest pending
-attempts will be completed, and as the newer attempts complete, they
-will replace them.
+They're all pending. This is a good time to note that iterating the
+subscription does so in the order in which attempts were added, so the
+oldest attempt is first.
+
+.. doctest::
+
+   >>> all_attempts = list(subscription.values())
+   >>> sorted_attempts = sorted(all_attempts, key=lambda attempt: attempt.createdTime)
+   >>> all_attempts == sorted_attempts
+   True
+   >>> oldest_attempt = all_attempts[0]
+   >>> attempt_50 = all_attempts[50]
+   >>> oldest_attempt.createdTime < attempt_50.createdTime < all_attempts[-1].createdTime
+   True
+
+Now if we deliver them, the oldest pending attempts will be completed,
+and as the newer attempts complete, they will replace them.
 
 .. doctest::
 
    >>> component.getUtility(interfaces.IWebhookDeliveryManager).waitForPendingDeliveries()
    >>> len(subscription)
    50
-   >>> list(set(attempt.status for attempt in subscription.values()))
+   >>> all_attempts = list(subscription.values())
+   >>> list(set(attempt.status for attempt in all_attempts))
    ['successful']
+   >>> oldest_attempt in all_attempts
+   False
+   >>> attempt_50 in all_attempts
+   True
 
 .. testcleanup::
 

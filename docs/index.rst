@@ -15,6 +15,7 @@ Contents:
    customizing_payloads
    delivery_attempts
    dynamic
+   events
    api/index
    changelog
 
@@ -27,10 +28,11 @@ Contents:
 TODO
 ====
 
-- Limited buffer for delivery attempts.
 - Externalization
 - Store some extra machine info on pending requests to help determine
   if they're still viable or should be redone.
+- Store some exception info on failed requests (including those that
+  don't pass the validator) for debugging purposes.
 
 Dynamic-subscriptions only
 --------------------------

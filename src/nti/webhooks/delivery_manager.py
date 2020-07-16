@@ -34,6 +34,8 @@ text_type = type(u'')
 class _RunJobWithDatabase(TransactionLoop):
     _connection = None
 
+    attempts = 10
+
     def run_handler(self, *args, **kwargs):
         return self.handler(self._connection, *args, **kwargs)
 
@@ -168,7 +170,9 @@ class ShipmentInfo(object):
         # the first site we find that way.
         if self._had_persistent:
             # ``had_persistent`` may be a worthless optimization, but it
-            # simplifies some test scenarios a bit during initial bring-up
+            # simplifies some test scenarios a bit during initial bring-up.
+            # TODO: Perhaps we want to just run one, or some limit,
+            # at a time to decrease the chances of conflicts?
             runner = _RunJobWithDatabase(self._process_results)
             runner(self._results)
         else:
@@ -181,8 +185,9 @@ class ShipmentInfo(object):
             attempt.request.createdTime = result.createdTime
             if result.exception_string:
                 attempt.response = None
-                attempt.status = 'failed'
+                # XXX: This isn't a good message. Tuck that away somewhere else.
                 attempt.message = result.exception_string
+                attempt.status = 'failed'
             else:
                 try:
                     cls._fill_req_resp_from_request(attempt, result.http_response)
