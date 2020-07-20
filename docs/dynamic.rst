@@ -352,6 +352,8 @@ static/global subscription delivery failed.
    >>> attempt = global_subscription.pop()
    >>> print(attempt.status)
    failed
+   >>> print(attempt.message)
+   404 Not Found
    >>> attempt.response.status_code
    404
    >>> print(attempt.request.url)
@@ -368,7 +370,8 @@ static/global subscription delivery failed.
     'User-Agent': 'nti.webhooks...'}
    >>> print(attempt.request.body)
    "Bob"
-
+   >>> len(attempt.internal_info.exception_history)
+   0
 
 
 .. testcleanup::

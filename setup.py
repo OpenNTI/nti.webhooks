@@ -12,6 +12,7 @@ entry_points = {
 TESTS_REQUIRE = [
     'coverage',
     'nti.testing',
+    'fudge',
     'zope.testrunner',
     'zope.lifecycleevent',
     'zope.securitypolicy', # ZCML directives for granting/denying

@@ -7,10 +7,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from contextlib import contextmanager
+
 from zope import interface
 from zope import component
 
 import responses
+import fudge
+from requests import RequestException
 
 from nti.testing.zodb import mock_db_trans
 from nti.testing.zodb import ZODBLayer
@@ -145,3 +149,25 @@ class InterestingClass(object):
     Do not depend on anything specific about this class
     other than its existence.
     """
+
+@contextmanager
+def http_requests_fail():
+    """
+    A context manager, during which delivery attempts
+    will fail with an exception from the HTTP layer.
+    """
+    with fudge.patch('requests.Session.send') as mock_send:
+        mock_send.is_callable().raises(RequestException)
+        yield
+
+@contextmanager
+def processing_results_fail():
+    """
+    A context manager, during which processing results
+    of delivery attempts will fail with an unexpected
+    exception.
+    """
+    path = 'nti.webhooks.delivery_manager.ShipmentInfo._fill_req_resp_from_request'
+    with fudge.patch(path) as mock_proc:
+        mock_proc.is_callable().raises(UnicodeError)
+        yield

@@ -52,3 +52,7 @@
 
    target
       Of a subscription: The URL to which the HTTP request is sent.
+
+   externalized
+      Of an object: Written out in a format suitable for use in an
+      HTTP REST API, such as JSON, using :mod:`nti.externalization`.

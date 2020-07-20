@@ -236,8 +236,11 @@ But it does record a failed attempt in the subscription:
    'failed'
    >>> print(attempt.message)
    Verification of the destination URL failed. Please check the domain.
-
-
+   >>> len(attempt.internal_info.exception_history)
+   1
+   >>> print(attempt.internal_info.exception_history[0])
+   Traceback (most recent call last):
+   ...
 
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry

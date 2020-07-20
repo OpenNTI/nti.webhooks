@@ -52,7 +52,6 @@ stored in the subscription, it has a length of 0 at this time.
 
 .. doctest::
 
-
    >>> from zope import component
    >>> from nti.webhooks import interfaces
    >>> sub_manager = component.getUtility(interfaces.IWebhookSubscriptionManager)
@@ -75,9 +74,16 @@ subscription, and commit the transaction to send the hook.
    >>> import transaction
    >>> from zope import lifecycleevent
    >>> from zope.container.folder import Folder
-   >>> _ = transaction.begin()
-   >>> lifecycleevent.created(Folder())
-   >>> transaction.commit()
+   >>> from nti.testing.time import time_monotonically_increases
+   >>> @time_monotonically_increases
+   ... def deliver_some(how_many=1, note=None):
+   ...     for _ in range(how_many):
+   ...       tx = transaction.begin()
+   ...       if note:
+   ...          tx.note(note)
+   ...       lifecycleevent.created(Folder())
+   ...       transaction.commit()
+   >>> deliver_some(note='/some/request/path')
 
 In the background, the `IWebhookDeliveryManager` is busy invoking the hook. We need to wait for it to
 finish, and then we can examine our delivery attempt:
@@ -86,7 +92,8 @@ finish, and then we can examine our delivery attempt:
 
    >>> from zope import component
    >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
-   >>> component.getUtility(IWebhookDeliveryManager).waitForPendingDeliveries()
+   >>> delivery_man = component.getUtility(IWebhookDeliveryManager)
+   >>> delivery_man.waitForPendingDeliveries()
 
 Attempt Details
 ~~~~~~~~~~~~~~~
@@ -100,7 +107,6 @@ such as the overall status, and an associated message.
    Attempts are immutable. They are created and managed entirely by
    the system and mutation attempts are not allowed.
 
-
 .. doctest::
 
    >>> len(subscription)
@@ -113,6 +119,20 @@ such as the overall status, and an associated message.
    'successful'
    >>> print(attempt.message)
    200 OK
+
+Also attached to the attempt is some debugging information. This
+information is intended for internal use and is not
+:term:`externalized`. The exact details may change over time, but some
+information is always present.
+
+.. doctest::
+
+   >>> internal_info = attempt.internal_info
+   >>> internal_info.originated
+   DeliveryOriginationInfo(pid=..., hostname=..., createdTime=..., transaction_note=...'/some/request/path')
+   >>> internal_info.exception_history
+   ()
+
 
 An important attribute of the attempt is the ``request``; this
 attribute (an `IWebhookDeliveryAttemptRequest`) provides information
@@ -165,13 +185,73 @@ A delivery attempt fails when:
 
 - The subscription was :term:`active`; and
 - The subscription was :term:`applicable`; and
-- Some error occurred communicating with :term:`target`. Such errors
-  include (but are not limited to) failed DNS lookups and HTTP error
-  responses.
+- Some error occurred communicating with :term:`target` (such errors
+  include, but are not limited to, failed DNS lookups and HTTP error
+  responses); OR
+- Some error occurred handling the response from the target;
+  note that in this case, the target might have processed things
+  correctly.
 
 It has the same ``request`` and ``response`` attributes as successful
 attempts, but, depending on when the error occurred, one or both of
-them may be `None`.
+them may be `None`. Details on the reasons for the failure
+may be found in the ``internal_info.exception_history``, if the HTTP
+request wasn't able to complete.
+
+We'll simulate some of these conditions using mocks. First, a failure
+communicating with the remote server.
+
+.. doctest::
+
+   >>> from nti.webhooks.testing import http_requests_fail
+   >>> with http_requests_fail():
+   ...     deliver_some(note='this should fail remotely')
+   ...     delivery_man.waitForPendingDeliveries()
+   >>> len(subscription)
+   1
+   >>> attempt = subscription.pop()
+   >>> attempt.status
+   'failed'
+   >>> print(attempt.message)
+   Contacting the remote server experienced an unexpected error.
+   >>> internal_info = attempt.internal_info
+   >>> print(internal_info.originated.transaction_note)
+   this should fail remotely
+   >>> len(internal_info.exception_history)
+   1
+   >>> print(internal_info.exception_history[0])
+   Traceback (most recent call last):
+     Module nti.webhooks.delivery_manager...
+   ...
+   ...RequestException
+   <BLANKLINE>
+
+Next, a failure to process the response.
+
+.. doctest::
+
+   >>> from nti.webhooks.testing import processing_results_fail
+   >>> with processing_results_fail():
+   ...     deliver_some(note='this should fail locally')
+   ...     delivery_man.waitForPendingDeliveries()
+   >>> len(subscription)
+   1
+   >>> attempt = subscription.pop()
+   >>> attempt.status
+   'failed'
+   >>> print(attempt.message)
+   Unexpected error handling the response from the server.
+   >>> internal_info = attempt.internal_info
+   >>> print(internal_info.originated.transaction_note)
+   this should fail locally
+   >>> len(internal_info.exception_history)
+   1
+   >>> print(internal_info.exception_history[0])
+   Traceback (most recent call last):
+     Module nti.webhooks.delivery_manager...
+   ...
+   UnicodeError
+   <BLANKLINE>
 
 Pending Delivery Attempts
 -------------------------
@@ -203,14 +283,7 @@ delivery, creating a bunch of attempts, and looking at the length.
 
    >>> from nti.webhooks.testing import begin_deferred_delivery
    >>> begin_deferred_delivery()
-   >>> from nti.testing.time import time_monotonically_increases
-   >>> @time_monotonically_increases
-   ... def deliver_many():
-   ...     for _ in range(100):
-   ...       transaction.begin()
-   ...       lifecycleevent.created(Folder())
-   ...       transaction.commit()
-   >>> deliver_many()
+   >>> deliver_some(100)
    >>> len(subscription)
    100
    >>> list(set(attempt.status for attempt in subscription.values()))
@@ -236,7 +309,7 @@ and as the newer attempts complete, they will replace them.
 
 .. doctest::
 
-   >>> component.getUtility(interfaces.IWebhookDeliveryManager).waitForPendingDeliveries()
+   >>> delivery_man.waitForPendingDeliveries()
    >>> len(subscription)
    50
    >>> all_attempts = list(subscription.values())
