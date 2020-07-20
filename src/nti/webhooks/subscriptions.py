@@ -7,6 +7,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import time
 
 from zope import component
@@ -24,7 +25,6 @@ from zope.security.management import queryInteraction
 from zope.security.management import endInteraction
 from zope.security.management import checkPermission
 from zope.security.testing import Participation
-
 
 from zope.container.interfaces import INameChooser
 from zope.container.btree import BTreeContainer
@@ -171,10 +171,10 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         except Exception: # pylint:disable=broad-except
             # The exception value can vary; it's not intended to be presented to end
             # users as-is
-            # XXX: For internal verification, we need some place to store it.
             attempt.message = (
                 u'Verification of the destination URL failed. Please check the domain.'
             )
+            attempt.internal_info.storeExceptionInfo(sys.exc_info())
             attempt.status = 'failed' # This could cause pruning
 
         # Store this once we have a final status. This could cause us to
@@ -219,7 +219,10 @@ def prune_subscription_when_resolved(event):
     if subscription is None or len(subscription) <= subscription.attempt_limit:
         return
 
-    for key, stored_attempt in subscription.items():
+    # Copy to avoid concurrent modification. On PyPy, we've seen this
+    # produce ``IndexError: list index out of range`` in some tests.
+    # This can be reproduced in CPython using PURE_PYTHON mode.
+    for key, stored_attempt in list(subscription.items()):
         if stored_attempt.resolved():
             del subscription[key]
             if len(subscription) <= subscription.attempt_limit:

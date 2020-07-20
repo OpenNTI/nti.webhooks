@@ -346,6 +346,27 @@ class _StatusField(Choice):
     def isResolved(self, status):
         return self.isFailure(status) or self.isSuccess(status)
 
+class IWebhookDeliveryAttemptInternalInfo(ICreatedTime):
+    """
+    Internal (debugging) information stored with a delivery
+    attempt.
+
+    This data is never externalized and is only loosely specified.
+
+    It may change over time.
+    """
+
+    exception_history = Attribute(
+        "A sequence (oldest to newest) of information "
+        "about exceptions encountered processing the attempt."
+    )
+
+    originated = Attribute(
+        "Information about where and how the request originated. "
+        "This can be used to see if it might still be pending or if "
+        "the instance has gone away."
+    )
+
 
 class IWebhookDeliveryAttempt(IContained, ILastModified):
     """
@@ -363,6 +384,7 @@ class IWebhookDeliveryAttempt(IContained, ILastModified):
         required=False,
     )
 
+    internal_info = Object(IWebhookDeliveryAttemptInternalInfo, required=True)
     request = Object(IWebhookDeliveryAttemptRequest, required=True)
     response = Object(IWebhookDeliveryAttemptResponse, required=True)
 

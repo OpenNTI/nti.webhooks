@@ -367,6 +367,7 @@ intersphinx_mapping = {
     'https://zopecomponent.readthedocs.io/en/latest/': None,
     'https://zopeconfiguration.readthedocs.io/en/latest/': None,
     'https://zopecontainer.readthedocs.io/en/latest/': None,
+    'https://zopeevent.readthedocs.io/en/latest/': None,
     'https://zopeinterface.readthedocs.io/en/latest/': None,
     'https://zopelifecycleevent.readthedocs.io/en/latest/': None,
     'https://zopelocation.readthedocs.io/en/latest/': None,
@@ -375,6 +376,7 @@ intersphinx_mapping = {
     'https://zopesite.readthedocs.io/en/latest/': None,
     'https://zopetraversing.readthedocs.io/en/latest/': None,
 
+    'https://ntiexternalization.readthedocs.io/en/latest/': None,
     'https://ntitesting.readthedocs.io/en/latest/': None,
     'https://ntischema.readthedocs.io/en/latest/': None,
     'https://ntisite.readthedocs.io/en/latest/': None,

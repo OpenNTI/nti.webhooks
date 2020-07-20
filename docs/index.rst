@@ -29,11 +29,6 @@ TODO
 ====
 
 .. todo:: Externalization
-.. todo::  Store some extra machine info on attempts to help determine
-           if they're still viable or should be redone. E.g., host
-           name, pid.
-.. todo::  Store some exception info on failed requests (including those that
-           don't pass the validator) for debugging purposes.
 .. todo:: Write events document.
 
 Dynamic-subscriptions only
@@ -44,7 +39,7 @@ Dynamic-subscriptions only
            have an example with static subscriptions). Maybe triggering on a
            different event type would be good too.
 .. todo::  Add test to add new subscription when manager already exists.
-.. todo:: API for deleting subscriptions.
+.. todo::  API for deleting subscriptions.
 .. todo::  Auto-deactivate subscriptions after: not finding principals, number of failed deliveries, etc.
 .. todo::  Auto-copy principal from interaction when none is given.
 .. todo::  What about using nti.externalizations (?) "find primary interface"

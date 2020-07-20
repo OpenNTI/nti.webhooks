@@ -7,6 +7,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import time
 
 from concurrent import futures
@@ -23,12 +24,14 @@ from ZODB.interfaces import IDatabase
 
 from nti.transactions.transactions import TransactionLoop
 
+from nti.webhooks import MessageFactory as _
+from nti.webhooks._util import print_exception_to_text
+from nti.webhooks._util import text_type
+
 from nti.webhooks.interfaces import IWebhookDeliveryManager
 from nti.webhooks.interfaces import IWebhookDeliveryManagerShipmentInfo
 
 logger = __import__('logging').getLogger(__name__)
-
-text_type = type(u'')
 
 
 class _RunJobWithDatabase(TransactionLoop):
@@ -156,10 +159,10 @@ class ShipmentInfo(object):
                         result.attempt_getter,
                         result.attempt_getter)
                     response = http_session.send(prepared_request)
-                except Exception as ex: # pylint:disable=broad-except
+                except Exception: # pylint:disable=broad-except
                     # Remember, cannot access persistent attributes
                     logger.exception("Failed to deliver for hook to %s", result.attempt_getter.to)
-                    result.exception_string = str(ex)
+                    result.exception_string = print_exception_to_text(sys.exc_info())
                 else:
                     result.http_response = response
 
@@ -178,6 +181,9 @@ class ShipmentInfo(object):
         else:
             self._process_results(None, self._results)
 
+    REMOTE_EXCEPTION_MESSAGE = _(u'Contacting the remote server experienced an unexpected error.')
+    LOCAL_EXCEPTION_MESSAGE = _(u'Unexpected error handling the response from the server.')
+
     @classmethod
     def _process_results(cls, connection, results):
         for result in results:
@@ -185,17 +191,22 @@ class ShipmentInfo(object):
             attempt.request.createdTime = result.createdTime
             if result.exception_string:
                 attempt.response = None
-                # XXX: This isn't a good message. Tuck that away somewhere else.
-                attempt.message = result.exception_string
+                attempt.message = cls.REMOTE_EXCEPTION_MESSAGE
+                attempt.internal_info.storeExceptionText(result.exception_string)
                 attempt.status = 'failed'
             else:
                 try:
                     cls._fill_req_resp_from_request(attempt, result.http_response)
                     # This is generally a programming error, probably an encoding something
                     # or other.
-                except Exception as ex: # pylint:disable=broad-except
+                except Exception: # pylint:disable=broad-except
                     logger.exception("Failed to parse response for attempt %s", attempt)
-                    attempt.message = text_type(ex)
+                    attempt.message = cls.LOCAL_EXCEPTION_MESSAGE
+                    attempt.internal_info.storeExceptionInfo(sys.exc_info())
+                    attempt.status = 'failed'
+                else:
+                    attempt.status = 'successful' if result.http_response.ok else 'failed'
+
 
     if str is bytes:
         @staticmethod
@@ -206,7 +217,6 @@ class ShipmentInfo(object):
 
     @classmethod
     def _fill_req_resp_from_request(cls, attempt, http_response):
-        attempt.status = 'successful' if http_response.ok else 'failed'
         attempt.message = u'%s %s' % (http_response.status_code, http_response.reason)
 
         http_request = http_response.request # type: requests.PreparedRequest
