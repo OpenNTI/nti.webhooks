@@ -104,6 +104,9 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         return principal
 
     def _find_permission(self, data):
+        if self.permission_id is None:
+            return None
+
         for context in (data, None):
             perm = component.queryUtility(IPermission, self.permission_id, context=context)
             if perm is not None:

@@ -12,9 +12,9 @@ Contents:
    configuration
    static
    security
+   delivery_attempts
    subscription_security
    customizing_payloads
-   delivery_attempts
    dynamic
    events
    api/index
