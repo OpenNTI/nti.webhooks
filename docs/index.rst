@@ -30,6 +30,10 @@ TODO
 
 .. todo:: Externalization
 .. todo:: Write events document.
+.. todo:: Subscription role managers. Just use the standard annotation
+          based role managers and add the rights for the owner.
+.. todo:: Clarify the concept of active/inactive subscriptions. Make
+          that a thing.
 
 Dynamic-subscriptions only
 --------------------------
@@ -39,7 +43,8 @@ Dynamic-subscriptions only
            have an example with static subscriptions). Maybe triggering on a
            different event type would be good too.
 .. todo::  Add test to add new subscription when manager already exists.
-.. todo::  API for deleting subscriptions.
+.. todo::  API for deleting subscriptions. Probably done by finding
+           all subscriptions for a resource/principal.
 .. todo::  Auto-deactivate subscriptions after: not finding principals, number of failed deliveries, etc.
 .. todo::  Auto-copy principal from interaction when none is given.
 .. todo::  What about using nti.externalizations (?) "find primary interface"
