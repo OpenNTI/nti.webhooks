@@ -240,6 +240,60 @@ using security proxies, then take the appropriate care to honor these
 permissions. For example, Pyramid view registrations should use these
 permissions before allowing access.
 
+.. _customizing_the_grants:
+
+Customizing The Permission Grants
+=================================
+
+For information on customizing the permission grants, see
+:func:`nti.webhooks.subscribers.apply_security_to_subscription`.
+
+.. autofunction:: nti.webhooks.subscribers.apply_security_to_subscription
+   :noindex:
+
+Here's a demonstration using a
+:class:`nti.webhooks.interfaces.IWebhookSubscriptionSecuritySetter`
+that does nothing. When we create a new subscription for Bob, no one
+(other than the manager, who inherits access) has any access.
+
+.. doctest::
+
+   >>> from nti.webhooks.interfaces import IWebhookSubscriptionSecuritySetter
+   >>> from nti.webhooks.interfaces import IWebhookSubscription
+   >>> from zope.interface import implementer
+   >>> from nti.webhooks.subscriptions import resetGlobals
+   >>> resetGlobals()
+   >>> @component.adapter(IWebhookSubscription)
+   ... @implementer(IWebhookSubscriptionSecuritySetter)
+   ... class NoOpSetter(object):
+   ...     def __init__(self, context, request=None):
+   ...         pass
+   ...     def __call__(self, context, event=None):
+   ...         pass
+   >>> from zope import component
+   >>> component.provideAdapter(NoOpSetter)
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="nti.webhooks" />
+   ...   <webhooks:staticSubscription
+   ...             to="https://example.com/some/path"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent"
+   ...             permission="zope.View"
+   ...             owner="webhook.bob" />
+   ... </configure>
+   ... """)
+   >>> subscription = sub_manager['Subscription']
+   >>> checkPermissions('webhook.alice', subscription)
+   Permissions(view=False, delete=False, other=False)
+   >>> checkPermissions('webhook.bob', subscription)
+   Permissions(view=False, delete=False, other=False)
+   >>> checkPermissions('webhook.manager', subscription)
+   Permissions(view=True, delete=True, other=True)
+
 .. testcleanup::
 
    from zope.testing import cleanup

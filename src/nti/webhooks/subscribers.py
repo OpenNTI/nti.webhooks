@@ -100,8 +100,8 @@ def _default_security_setter(subscription):
 @component.adapter(IWebhookSubscription, IObjectAddedEvent)
 def apply_security_to_subscription(subscription, event):
     """
-    Set the permissions for the *subscription* when it is added
-    to a container.
+    Set the permissions for the *subscription* when it is added to a
+    container.
 
     By default, only the *owner_id* of the *subscription* gets any
     permissions (and those permissions are ``zope.View`` and
@@ -110,13 +110,15 @@ def apply_security_to_subscription(subscription, event):
 
     If you want to add additional permissions, simply add an
     additional subscriber. If you want to change or replace the
-    default permissions, add a utility (in the current site) implementing
-    ``IWebhookSubscriptionSecuritySetter``; in that case you will
-    be completely responsible for all security declarations.
+    default permissions, add an adapter for the subscription (in the
+    current site) implementing ``IWebhookSubscriptionSecuritySetter``;
+    in that case you will be completely responsible for all security
+    declarations.
     """
     if not subscription.owner_id:
         return
 
-    setter = component.queryUtility(IWebhookSubscriptionSecuritySetter,
+    setter = component.queryAdapter(subscription,
+                                    IWebhookSubscriptionSecuritySetter,
                                     default=_default_security_setter)
     setter(subscription)

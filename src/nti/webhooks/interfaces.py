@@ -587,10 +587,17 @@ class IWebhookResourceDiscriminator(Interface):
 
 class IWebhookSubscriptionSecuritySetter(Interface):
     """
-    A utility that sets initial security declarations for a subscription.
+    An adapter for the subscription that sets initial security
+    declarations for a subscription.
+
+    The subscription is also passed to the call method to allow for
+    simple functions to be used as the adapter.
+
+    In the future, the call method might also accept an ``event`` argument,
+    and the request might be passed as a second argument to the constructor.
     """
 
-    def __call__(subscription):
+    def __call__(subscription): # pylint:disable=signature-differs
         """
         Set the security declarations for the subscription.
         """
