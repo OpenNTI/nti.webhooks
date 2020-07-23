@@ -12,6 +12,7 @@ Contents:
    configuration
    static
    security
+   subscription_security
    customizing_payloads
    delivery_attempts
    dynamic

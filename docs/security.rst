@@ -1,6 +1,6 @@
-=================
- Security Checks
-=================
+==========================
+ Delivery Security Checks
+==========================
 
 In :doc:`static`, we discussed how to use ZCML to register for webhook
 deliveries when certain events on certain resources happen.
@@ -110,6 +110,7 @@ Next, we can find the :term:`active` subscription, just as before:
    >>> find_active_subscriptions_for(event.object, event)
    [<...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>]
 
+.. _default-view-access:
 
 Subscription Is Not Applicable By Default
 -----------------------------------------
