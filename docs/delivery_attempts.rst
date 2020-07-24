@@ -67,22 +67,14 @@ To avoid actually trying to talk to example.com, we'll be using some mocks.
    >>> mock_delivery_to('https://example.com/some/path', method='POST', status=200)
 
 Now we will create the object, broadcast the event to engage the
-subscription, and commit the transaction to send the hook.
+subscription, and commit the transaction to send the hook. A helper to
+do that is already defined.
+
+.. literalinclude:: delivery_helper.py
 
 .. doctest::
 
-   >>> import transaction
-   >>> from zope import lifecycleevent
-   >>> from zope.container.folder import Folder
-   >>> from nti.testing.time import time_monotonically_increases
-   >>> @time_monotonically_increases
-   ... def deliver_some(how_many=1, note=None):
-   ...     for _ in range(how_many):
-   ...       tx = transaction.begin()
-   ...       if note:
-   ...          tx.note(note)
-   ...       lifecycleevent.created(Folder())
-   ...       transaction.commit()
+   >>> from delivery_helper import deliver_some
    >>> deliver_some(note='/some/request/path')
 
 In the background, the `IWebhookDeliveryManager` is busy invoking the hook. We need to wait for it to
@@ -90,10 +82,9 @@ finish, and then we can examine our delivery attempt:
 
 .. doctest::
 
-   >>> from zope import component
-   >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
-   >>> delivery_man = component.getUtility(IWebhookDeliveryManager)
-   >>> delivery_man.waitForPendingDeliveries()
+   >>> from delivery_helper import wait_for_deliveries
+   >>> wait_for_deliveries()
+
 
 Attempt Details
 ~~~~~~~~~~~~~~~
@@ -206,7 +197,7 @@ communicating with the remote server.
    >>> from nti.webhooks.testing import http_requests_fail
    >>> with http_requests_fail():
    ...     deliver_some(note='this should fail remotely')
-   ...     delivery_man.waitForPendingDeliveries()
+   ...     wait_for_deliveries()
    >>> len(subscription)
    1
    >>> attempt = subscription.pop()
@@ -233,7 +224,7 @@ Next, a failure to process the response.
    >>> from nti.webhooks.testing import processing_results_fail
    >>> with processing_results_fail():
    ...     deliver_some(note='this should fail locally')
-   ...     delivery_man.waitForPendingDeliveries()
+   ...     wait_for_deliveries()
    >>> len(subscription)
    1
    >>> attempt = subscription.pop()
@@ -309,7 +300,7 @@ and as the newer attempts complete, they will replace them.
 
 .. doctest::
 
-   >>> delivery_man.waitForPendingDeliveries()
+   >>> wait_for_deliveries()
    >>> len(subscription)
    50
    >>> all_attempts = list(subscription.values())

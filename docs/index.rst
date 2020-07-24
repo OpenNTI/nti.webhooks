@@ -12,8 +12,9 @@ Contents:
    configuration
    static
    security
-   customizing_payloads
    delivery_attempts
+   subscription_security
+   customizing_payloads
    dynamic
    events
    api/index
@@ -30,8 +31,6 @@ TODO
 
 .. todo:: Externalization
 .. todo:: Write events document.
-.. todo:: Subscription role managers. Just use the standard annotation
-          based role managers and add the rights for the owner.
 .. todo:: Clarify the concept of active/inactive subscriptions. Make
           that a thing.
 

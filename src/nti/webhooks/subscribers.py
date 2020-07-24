@@ -14,10 +14,14 @@ __all__ = ()
 
 import transaction
 from zope import component
+from zope import interface
 from zope.interface import providedBy
-
+from zope.lifecycleevent.interfaces import IObjectAddedEvent
+from zope.securitypolicy.interfaces import IPrincipalPermissionManager
 
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
+from nti.webhooks.interfaces import IWebhookSubscription
+from nti.webhooks.interfaces import IWebhookSubscriptionSecuritySetter
 from nti.webhooks.datamanager import WebhookDataManager
 
 def find_active_subscriptions_for(data, event):
@@ -80,3 +84,41 @@ def dispatch_webhook_event(data, event):
         # TODO: Choosing which datamanager resource to use might
         # be a good extension point.
         WebhookDataManager.join_transaction(transaction.manager, data, event, subscriptions)
+
+_DEFAULT_PERMISSIONS = (
+    'zope.View',
+    'nti.actions.delete',
+)
+
+@interface.provider(IWebhookSubscriptionSecuritySetter)
+def _default_security_setter(subscription):
+    prin_per = IPrincipalPermissionManager(subscription)
+    for perm_id in _DEFAULT_PERMISSIONS:
+        # pylint:disable=too-many-function-args
+        prin_per.grantPermissionToPrincipal(perm_id, subscription.owner_id)
+
+@component.adapter(IWebhookSubscription, IObjectAddedEvent)
+def apply_security_to_subscription(subscription, event):
+    """
+    Set the permissions for the *subscription* when it is added to a
+    container.
+
+    By default, only the *owner_id* of the *subscription* gets any
+    permissions (and those permissions are ``zope.View`` and
+    ``nti.actions.delete``). If there is no owner, no permissions are
+    added.
+
+    If you want to add additional permissions, simply add an
+    additional subscriber. If you want to change or replace the
+    default permissions, add an adapter for the subscription (in the
+    current site) implementing ``IWebhookSubscriptionSecuritySetter``;
+    in that case you will be completely responsible for all security
+    declarations.
+    """
+    if not subscription.owner_id:
+        return
+
+    setter = component.queryAdapter(subscription,
+                                    IWebhookSubscriptionSecuritySetter,
+                                    default=_default_security_setter)
+    setter(subscription)

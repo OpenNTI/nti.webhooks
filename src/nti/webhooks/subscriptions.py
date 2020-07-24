@@ -18,6 +18,7 @@ from zope.component.persistentregistry import PersistentComponents
 from zope.authentication.interfaces import IAuthentication
 from zope.authentication.interfaces import IUnauthenticatedPrincipal
 from zope.authentication.interfaces import PrincipalLookupError
+from zope.annotation import IAttributeAnnotatable
 
 from zope.security.interfaces import IPermission
 from zope.security.management import newInteraction
@@ -55,7 +56,7 @@ class _CheckObjectOnSetBTreeContainer(BTreeContainer):
         super(_CheckObjectOnSetBTreeContainer, self)._setitemf(key, value)
 
 
-@implementer(IWebhookSubscription)
+@implementer(IWebhookSubscription, IAttributeAnnotatable)
 class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     """
     Default, non-persistent implementation of `IWebhookSubscription`.
@@ -103,6 +104,9 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         return principal
 
     def _find_permission(self, data):
+        if self.permission_id is None:
+            return None
+
         for context in (data, None):
             perm = component.queryUtility(IPermission, self.permission_id, context=context)
             if perm is not None:

@@ -61,12 +61,14 @@ setup(
         # interface.
         'futures; python_version == "2.7"',
         'zope.authentication', # IAuthentication
+        'zope.annotation', # IAttributeAnnotatable
         'zope.interface >= 5.1',
         'zope.container',
         'zope.security', # IPrincipal, Permission
         'zope.principalregistry', # TextId
         'zope.componentvocabulary',
         'zope.vocabularyregistry',
+        'zope.securitypolicy', # IPrincipalPermissionManager
         'zope.site',
         'nti.site',
         'nti.zodb',

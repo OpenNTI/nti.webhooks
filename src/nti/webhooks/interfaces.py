@@ -489,6 +489,8 @@ class IWebhookSubscription(IContainerNamesContainer):
     )
 
     owner_id = TextId(
+        # XXX: This might not work. zope.schema.Id requires dotted names or URIs;
+        # not all principal IDs are guaranteed to be that.
         title=u"The ID of the ``IPrincipal`` that owns this subscription.",
         description=u"""
         This will be validated at runtime when an event arrives. If
@@ -496,6 +498,8 @@ class IWebhookSubscription(IContainerNamesContainer):
         a principal with the given ID, the delivery will be failed.
 
         Leave unset to disable security checks.
+
+        This cannot be changed after creation.
         """,
         required=False,
     )
@@ -579,4 +583,21 @@ class IWebhookResourceDiscriminator(Interface):
     def __call__(): # pylint:disable=signature-differs
         """
         Return the value to use for ``for``.
+        """
+
+class IWebhookSubscriptionSecuritySetter(Interface):
+    """
+    An adapter for the subscription that sets initial security
+    declarations for a subscription.
+
+    The subscription is also passed to the call method to allow for
+    simple functions to be used as the adapter.
+
+    In the future, the call method might also accept an ``event`` argument,
+    and the request might be passed as a second argument to the constructor.
+    """
+
+    def __call__(subscription): # pylint:disable=signature-differs
+        """
+        Set the security declarations for the subscription.
         """
