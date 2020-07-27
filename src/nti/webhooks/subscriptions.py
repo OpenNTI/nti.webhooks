@@ -12,6 +12,9 @@ import time
 
 from zope import component
 from zope.interface import implementer
+from zope.interface.interfaces import IRegistered
+from zope.interface.interfaces import IUnregistered
+
 from zope.component.globalregistry import BaseGlobalComponents
 from zope.component.persistentregistry import PersistentComponents
 
@@ -19,6 +22,8 @@ from zope.authentication.interfaces import IAuthentication
 from zope.authentication.interfaces import IUnauthenticatedPrincipal
 from zope.authentication.interfaces import PrincipalLookupError
 from zope.annotation import IAttributeAnnotatable
+
+from zope.lifecycleevent import IObjectRemovedEvent
 
 from zope.security.interfaces import IPermission
 from zope.security.management import newInteraction
@@ -63,13 +68,22 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     """
     for_ = permission_id = owner_id = dialect_id = when = None
     to = u''
+    active = None
     createDirectFieldProperties(IWebhookSubscription)
+
+    __parent__ = None
 
     attempt_limit = 50
 
     def __init__(self, **kwargs):
         SchemaConfigured.__init__(self, **kwargs)
         _CheckObjectOnSetBTreeContainer.__init__(self)
+
+    def _setActive(self, active):
+        # The public field is readonly; that only kicks in
+        # when there is a value in the __dict__ already.
+        self.__dict__.pop('active', None)
+        self.active = active
 
     def pop(self):
         """Testing only. Removes and returns a random value."""
@@ -215,6 +229,7 @@ class PersistentSubscription(Subscription, Persistent):
     def _p_repr(self):
         return Subscription.__repr__(self)
 
+
 @component.adapter(IWebhookDeliveryAttemptResolvedEvent)
 def prune_subscription_when_resolved(event):
     # type: (IWebhookDeliveryAttemptResolvedEvent) -> None
@@ -248,16 +263,43 @@ class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
     def _new_Subscription(self, **kwargs):
         return PersistentSubscription(**kwargs)
 
-    def createSubscription(self, **kwargs):
-        subscription = self._new_Subscription(**kwargs)
+    def createSubscription(self, to=None, for_=None, when=None,
+                           owner_id=None, permission_id=None,
+                           dialect_id=None):
+        subscription = self._new_Subscription(to=to, for_=for_, when=when, owner_id=owner_id,
+                                              permission_id=permission_id, dialect_id=dialect_id)
         name_chooser = INameChooser(self)
         name = name_chooser.chooseName('', subscription) # pylint:disable=too-many-function-args,assignment-from-no-return
         self[name] = subscription
 
-        self.registry.registerHandler(subscription, (subscription.for_, subscription.when),
-                                      event=False)
+        self.activateSubscription(subscription)
+
         return subscription
 
+    def activateSubscription(self, subscription):
+        if subscription.__parent__ is not self:
+            raise AssertionError
+        self.registry.registerHandler(subscription, (subscription.for_, subscription.when),)
+        return True
+
+    def deactivateSubscription(self, subscription):
+        if subscription.__parent__ is not self:
+            raise AssertionError
+        return self.registry.unregisterHandler(subscription, (subscription.for_, subscription.when),)
+
+
+@component.adapter(IWebhookSubscription, IRegistered)
+def sync_active_status_registered(subscription, _event):
+    subscription._setActive(True) # pylint:disable=protected-access
+
+@component.adapter(IWebhookSubscription, IUnregistered)
+def sync_active_status_unregistered(subscription, _event):
+    subscription._setActive(False) # pylint:disable=protected-access
+
+
+@component.adapter(IWebhookSubscription, IObjectRemovedEvent)
+def deactivate_subscription_when_removed(subscription, event):
+    event.oldParent.deactivateSubscription(subscription)
 
 class GlobalSubscriptionComponents(BaseGlobalComponents):
     """

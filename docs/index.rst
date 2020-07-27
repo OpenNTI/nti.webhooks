@@ -29,10 +29,12 @@ Contents:
 TODO
 ====
 
-.. todo:: Externalization
+.. todo:: Externalization for the objects defined here.
+          Note that we will need to be able to support the
+          created/modified time properties as ISO format strings, not
+          numbers for zapier.
 .. todo:: Write events document.
-.. todo:: Clarify the concept of active/inactive subscriptions. Make
-          that a thing.
+
 
 Dynamic-subscriptions only
 --------------------------
@@ -55,7 +57,7 @@ Thoughts on HTTP API
 --------------------
 
 .. todo::  Generic end-point with context ``IPossibleWebhookPayload``; the last
-           part of the path would be a shortcut name for the event.
+           part of the path (or a query param?) would be a shortcut name for the event.
 
 ====================
  Indices and tables

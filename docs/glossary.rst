@@ -37,7 +37,7 @@
    inactive
       Of a subscription: An existing subscription is inactive if
       webhook deliviries will no longer be attempted to it. It may
-      transaction back to :term:`active` at any time.
+      transition back to :term:`active` at any time.
 
    applicable
       Of a subscription: Does the subscription apply to some piece of

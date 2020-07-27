@@ -552,6 +552,14 @@ class IWebhookSubscription(IContainerNamesContainer):
         this method may cause that size to temporarily be exceeded
         """
 
+    active = Bool(
+        title=u"Is this webhook active? (Registered to process events.)",
+        description=u"""
+        Determined by the subscription manager that owns this subscription.
+        """,
+        default=True,
+        readonly=True,
+    )
 
 class IWebhookSubscriptionManager(IContainerNamesContainer):
     """
@@ -570,7 +578,19 @@ class IWebhookSubscriptionManager(IContainerNamesContainer):
         The new subscription is returned. It is a child of this object.
 
         All arguments are by keyword, and have the same meaning as
-        the attributes documented.
+        the attributes documented for :class:`IWebhookSubscription`.
+
+        Newly created subscriptions are always active.
+        """
+
+    def deactivateSubscription(subscription):
+        """
+        Given a subscription managed by this object, deactivate it.
+        """
+
+    def activateSubscription(subscription):
+        """
+        Given a subscription managed by this object, activate it.
         """
 
 
