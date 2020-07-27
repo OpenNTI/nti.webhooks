@@ -134,19 +134,23 @@ deliver a webhook.
 Active Subscriptions
 ====================
 
-Now that we have that in place, let's verify that it exists:
+Now that we have that in place, let's verify that it exists as part of
+the global default ``IWebhookSubscriptionManager``.
 
 .. doctest::
 
    >>> from nti.webhooks.interfaces import IWebhookSubscriptionManager
    >>> from zope import component
    >>> sub_manager = component.getUtility(IWebhookSubscriptionManager)
+   >>> from zope.interface import verify
+   >>> verify.verifyObject(IWebhookSubscriptionManager, sub_manager)
+   True
    >>> len(list(sub_manager))
    1
-   >>> items = list(sub_manager.items())
-   >>> print(items[0][0])
+   >>> name, subscription = list(sub_manager.items())[0]
+   >>> print(name)
    Subscription
-   >>> items[0][1]
+   >>> subscription
    <...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>
 
 And we'll verify that it is :term:`active`, by looking for it using
@@ -158,11 +162,15 @@ the event we just declared:
    >>> from zope.container.folder import Folder
    >>> from zope.lifecycleevent import ObjectCreatedEvent
    >>> event = ObjectCreatedEvent(Folder())
-   >>> len(find_active_subscriptions_for(event.object, event))
+   >>> active_subscriptions = list(find_active_subscriptions_for(event.object, event))
+   >>> len(active_subscriptions)
    1
-   >>> find_active_subscriptions_for(event.object, event)
-   [<...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>]
-
+   >>> active_subscriptions[0]
+   <...Subscription ... to='https://this_domain_does_not_exist' for=IContentContainer when=IObjectCreatedEvent>
+   >>> active_subscriptions[0] is subscription
+   True
+   >>> subscription.active
+   True
 
 Next, we need to know if the subscription is :term:`applicable` to the
 data. Since we didn't specify a permission or a principal to check, the subscription is applicable:
@@ -245,6 +253,75 @@ But it does record a failed attempt in the subscription:
 
 .. _z3c.baseregistry: https://github.com/zopefoundation/z3c.baseregistry/tree/master/src/z3c/baseregistry
 
+
+Inactive Subscriptions
+======================
+
+Subscriptions can be deactivated (made :term:`inactive`) by asking the
+manager to do this. The subscription manager is always the subscription's parent,
+and deactivating the subscription more than once does nothing.
+
+.. doctest::
+
+   >>> subscription.__parent__ is sub_manager
+   True
+   >>> sub_manager.deactivateSubscription(subscription)
+   True
+   >>> sub_manager.deactivateSubscription(subscription)
+   False
+   >>> subscription.active
+   False
+
+Note that we cannot change this attribute directly, it must be done through the manager.
+
+.. doctest::
+
+   >>> subscription.active = True
+   Traceback (most recent call last):
+   ...
+   ValueError:...field is readonly
+
+Inactive subscriptions will not be used for future deliveries, but
+their existing history is preserved.
+
+.. doctest::
+
+   >>> len(subscription)
+   1
+   >>> find_active_subscriptions_for(event.object, event)
+   []
+   >>> tx = transaction.begin()
+   >>> lifecycleevent.created(Folder())
+   >>> tx._resources
+   []
+   >>> transaction.commit()
+   >>> len(subscription)
+   1
+
+Of course, inactive subscriptions can be activated again.
+
+.. doctest::
+
+   >>> sub_manager.activateSubscription(subscription)
+   True
+   >>> subscription.active
+   True
+   >>> tx = transaction.begin()
+   >>> lifecycleevent.created(Folder())
+   >>> transaction.commit()
+   >>> len(subscription)
+   2
+
+Removing a subscription from its subscription manager automatically deactivates
+it.
+
+.. doctest::
+
+   >>> del sub_manager[subscription.__name__]
+   >>> subscription.__parent__ is None
+   True
+   >>> subscription.active
+   False
 
 .. testcleanup::
 

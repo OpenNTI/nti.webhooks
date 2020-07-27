@@ -34,6 +34,13 @@
     <!-- Managing the size of subscription histories. -->
     <subscriber handler=".subscriptions.prune_subscription_when_resolved"
                 trusted="true" />
+    <!-- Internal state handling -->
+    <subscriber handler=".subscriptions.sync_active_status_registered"
+                trusted="true" />
+    <subscriber handler=".subscriptions.sync_active_status_unregistered"
+                trusted="true" />
+    <subscriber handler=".subscriptions.deactivate_subscription_when_removed"
+                trusted="true" />
 
     <!-- The default validator -->
     <utility factory=".destination_validator.DefaultDestinationValidator" />
