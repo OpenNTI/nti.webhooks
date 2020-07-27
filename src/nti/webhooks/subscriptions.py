@@ -11,7 +11,9 @@ import sys
 import time
 
 from zope import component
+from zope.interface import Interface
 from zope.interface import implementer
+from zope.interface import providedBy
 from zope.interface.interfaces import IRegistered
 from zope.interface.interfaces import IUnregistered
 
@@ -61,7 +63,26 @@ class _CheckObjectOnSetBTreeContainer(BTreeContainer):
         super(_CheckObjectOnSetBTreeContainer, self)._setitemf(key, value)
 
 
-@implementer(IWebhookSubscription, IAttributeAnnotatable)
+class IApplicableSubscriptionFactory(Interface): # pylint:disable=inherit-non-class
+    """
+    A private contract between the Subscription and its SubscriptionManager.
+
+    This is only called on subscriptions that are already determined to be *active*;
+    if the subscription is also *applicable*, then it should be returned. Otherwise,
+    it should return None.
+
+    This is called when we intend to attempt delivery, so it's a good time to take cleanup
+    action if the subscription isn't applicable for reasons that aren't directly related
+    to the *data* and the *event*, for example, if the principal cannot be found.
+    """
+
+    def __call__(data, event): # pylint:disable=no-self-argument,signature-differs
+        """
+        See class documentation.
+        """
+
+
+@implementer(IWebhookSubscription, IAttributeAnnotatable, IApplicableSubscriptionFactory)
 class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     """
     Default, non-persistent implementation of `IWebhookSubscription`.
@@ -135,6 +156,9 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             if not isinstance(data, self.for_): # pylint:disable=isinstance-second-argument-not-valid-type
                 return False
 
+        return self.__checkSecurity(data)
+
+    def __checkSecurity(self, data):
         if not self.permission_id and not self.owner_id:
             # If no security is requested, we're good.
             return True
@@ -167,6 +191,16 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
                 current_interaction.remove(participation)
             else:
                 endInteraction()
+
+    def __call__(self, data, event):
+        # We're assumed applicable for the data and event, no need to double
+        # check that.
+        assert self.active
+        if self.__checkSecurity(data):
+            return self
+        # TODO: Here's where the cleanup would go, or at least incrementing a
+        # counter and sending events when its over a certain value.
+        return None
 
     @CachedProperty('dialect_id')
     def dialect(self):
@@ -279,13 +313,32 @@ class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
     def activateSubscription(self, subscription):
         if subscription.__parent__ is not self:
             raise AssertionError
-        self.registry.registerHandler(subscription, (subscription.for_, subscription.when),)
+        # active subscriptions are managed as 'subscription adapters'.
+        # This lets us use the ``subscribers()`` API to treat them as
+        # callable factories that return None if they are not
+        # applicable. (Compare with 'handlers', which, while callable,
+        # aren't treated as factories and have no return value). The
+        # major difference is that we need to provide a *provided* argument so that
+        # we can replicate it when we call ``subscribers``.
+        self.registry.registerSubscriptionAdapter(subscription,
+                                                  (subscription.for_, subscription.when),
+                                                  IWebhookSubscription)
         return True
 
     def deactivateSubscription(self, subscription):
         if subscription.__parent__ is not self:
             raise AssertionError
-        return self.registry.unregisterHandler(subscription, (subscription.for_, subscription.when),)
+        return self.registry.unregisterSubscriptionAdapter(subscription,
+                                                           (subscription.for_, subscription.when),
+                                                           IWebhookSubscription)
+
+    def activeSubscriptions(self, data, event):
+        # pylint:disable=no-member
+        return self.registry.adapters.subscriptions((providedBy(data), providedBy(event)),
+                                                    IWebhookSubscription)
+
+    def subscriptionsToDeliver(self, data, event):
+        return self.registry.subscribers((data, event), IWebhookSubscription)
 
 
 @component.adapter(IWebhookSubscription, IRegistered)

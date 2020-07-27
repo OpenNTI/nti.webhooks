@@ -539,6 +539,8 @@ class IWebhookSubscription(IContainerNamesContainer):
         This does not take into account whether this subscription is
         active or not, but does take into account the permission and principal
         declared for the subscription as well as the type/interface.
+
+        This is a query method that does not mutate this object.
         """
 
     def createDeliveryAttempt(payload_data):
@@ -561,7 +563,35 @@ class IWebhookSubscription(IContainerNamesContainer):
         readonly=True,
     )
 
-class IWebhookSubscriptionManager(IContainerNamesContainer):
+
+class IWebhookSubscriptionRegistry(Interface):
+
+    def activeSubscriptions(data, event):
+        """
+        Find active subscriptions for the *data* and the *event*.
+
+        This is a simple query method and does not result in any status changes
+        or signal an intent to deliver.
+
+        :return: A sequence of subscriptions.
+        """
+
+    def subscriptionsToDeliver(data, event):
+        """
+        Find subscriptions that are both active and applicable for the
+        *data* and the *event*.
+
+        Subscriptions that are active, but not applicable, due to
+        circumstances unrelated to the data and event (for example,
+        the permission is not available, or the principal or dialect
+        cannot be found) may be removed from the active set of subscriptions
+        for future calls to this method and :meth:`activeSubscriptions`.
+
+        :return: A sequence of subscriptions.
+        """
+
+class IWebhookSubscriptionManager(IWebhookSubscriptionRegistry,
+                                  IContainerNamesContainer):
     """
     A utility that manages subscriptions.
 

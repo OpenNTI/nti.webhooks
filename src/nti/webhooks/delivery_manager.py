@@ -22,7 +22,7 @@ from zope.cachedescriptors.property import Lazy
 from persistent.interfaces import IPersistent
 from ZODB.interfaces import IDatabase
 
-from nti.transactions.transactions import TransactionLoop
+from nti.transactions.loop import TransactionLoop
 
 from nti.webhooks import MessageFactory as _
 from nti.webhooks._util import print_exception_to_text
