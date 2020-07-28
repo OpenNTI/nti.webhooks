@@ -35,7 +35,10 @@
     <!-- Managing the size of subscription histories. -->
     <subscriber handler=".subscriptions.prune_subscription_when_resolved"
                 trusted="true" />
+    <!-- Deactivating subscriptions on certain conditions. -->
     <subscriber handler=".subscriptions.deactivate_subscription_when_all_failed"
+                trusted="true" />
+    <subscriber handler=".subscriptions.deactivate_subscription_when_applicable_limit_exceeded"
                 trusted="true" />
     <!-- Internal state handling -->
     <subscriber handler=".subscriptions.sync_active_status_registered"

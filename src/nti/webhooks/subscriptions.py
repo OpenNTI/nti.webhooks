@@ -57,6 +57,7 @@ from nti.webhooks.interfaces import IWebhookSubscriptionManager
 from nti.webhooks.interfaces import IWebhookDestinationValidator
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptResolvedEvent
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptFailedEvent
+from nti.webhooks.interfaces import IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached
 from nti.webhooks.interfaces import WebhookSubscriptionApplicabilityPreconditionFailureLimitReached
 
 from nti.webhooks.attempts import WebhookDeliveryAttempt
@@ -110,6 +111,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
 
     attempt_limit = 50
     applicable_precondition_failure_limit = 50
+    fallback_to_unauthenticated_principal = True
 
     def __init__(self, **kwargs):
         SchemaConfigured.__init__(self, **kwargs)
@@ -123,6 +125,8 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         if active:
             # Back to the default message
             self.__dict__.pop('status_message', None)
+            # Reset to 0
+            del self._delivery_applicable_precondition_failed
 
     def pop(self):
         """Testing only. Removes and returns a random value."""
@@ -146,14 +150,25 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             try:
                 principal = auth.getPrincipal(self.owner_id)
             except PrincipalLookupError:
-                # If no principal by that name exists, use the unauthenticatedPrincipal.
-                # This could return None. It will still be replaced by the
-                # named principal in the other IAuthentication, if need be.
-                principal = auth.unauthenticatedPrincipal()
+                # If no principal by that name exists, use the
+                # unauthenticatedPrincipal. This could return None. It
+                # will still be replaced by the named principal in the
+                # other IAuthentication, if need be.
+                #
+                # XXX: Using the unauthenticated principal when no
+                # principal can be found is elegant. But it makes it
+                # harder to deactivate broken subscriptions (we'd have
+                # to spread this knowledge around oa few functions).
+                # That's why we allow disabling it, and why persistent
+                # subscriptions disable it by default. Maybe there's
+                # something better? Maybe spreading that knowledge is
+                # the best we can do.
+                if self.fallback_to_unauthenticated_principal:
+                    principal = auth.unauthenticatedPrincipal()
             else:
                 assert principal is not None
                 break
-        if principal is None:
+        if principal is None and self.fallback_to_unauthenticated_principal:
             # Hmm. Either no IAuthentication found, or none of them found a
             # principal while also not having an unauthenticated principal.
             # In that case, we will fall back to the global IUnauthenticatedPrincipal as
@@ -179,9 +194,20 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             if not isinstance(data, self.for_): # pylint:disable=isinstance-second-argument-not-valid-type
                 return False
 
-        return self.__checkSecurity(data)
+        # No need for the distinction it makes here.
+        return bool(self.__checkSecurity(data))
 
     def __checkSecurity(self, data):
+        """
+        Returns a boolean indicating whether *data* passes the security
+        checkes defined for this subscription.
+
+        If we are not able to make the security check because the principal or
+        permission we are supposed to use is not defined, returns the special
+        (false) value `None`. This can be used to distinguish the case where
+        access is denied by the security policy from the case where requested
+        principals are missing.
+        """
         if not self.permission_id and not self.owner_id:
             # If no security is requested, we're good.
             return True
@@ -195,7 +221,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         if principal is None or permission is None:
             # A missing permission causes zope.security to grant full access.
             # It's treated the same as zope.Public. So don't let that happen.
-            return False
+            return None
 
         # Now, we need to set up the interaction and do the security check.
         participation = Participation(principal)
@@ -215,6 +241,10 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             else:
                 endInteraction()
 
+    # We only ever use the ``increment()`` method of this, *or* we
+    # delete it (which works even if there's nothing in our ``__dict__``)
+    # when we are making other changes, so subclasses do not need to be
+    # ``PersistentPropertyHolder`` objects.
     _delivery_applicable_precondition_failed = NumericPropertyDefaultingToZero(
         '_delivery_applicable_precondition_failed',
         # We have to use NumericMinimum instead of NumericMaximum or
@@ -227,11 +257,31 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         # We're assumed applicable for the data and event, no need to double
         # check that.
         assert self.active
-        if self.__checkSecurity(data):
+        security_check = self.__checkSecurity(data)
+        if security_check:
+            # Yay, access granted!
+            # TODO: Should we decrement the failure count here
+            # (keeping a floor of 0)?
             return self
-        failures = self._delivery_applicable_precondition_failed.increment()
-        if failures.value >= self.applicable_precondition_failure_limit:
-            notify(WebhookSubscriptionApplicabilityPreconditionFailureLimitReached(self, failures))
+        # Boo, no access :(
+        if security_check is None:
+            # Failed to find the principal/permission. Something is wrong.
+            failures = self._delivery_applicable_precondition_failed
+            try:
+                incr = failures.increment
+            except AttributeError:
+                # See https://github.com/NextThought/nti.zodb/issues/7
+                failures.value += 1
+            else:
+                failures = failures.increment()
+            # XXX: JAM: Why did I think checking it here was the best thing, instead
+            # of just sending the event every time a failure occurs? Was I trying to
+            # cut down on the chance of misusing the failure property? Trying to cut down
+            # on the number of events generated? Trying to reduce conflicts?
+            if failures.value >= self.applicable_precondition_failure_limit:
+                notify(WebhookSubscriptionApplicabilityPreconditionFailureLimitReached(
+                    self,
+                    failures))
         return None
 
     @CachedProperty('dialect_id')
@@ -289,6 +339,7 @@ class PersistentSubscription(Subscription, Persistent):
     """
     Persistent implementation of `IWebhookSubscription`
     """
+    fallback_to_unauthenticated_principal = False
 
     def _new_deliveryAttempt(self):
         return PersistentWebhookDeliveryAttempt()
@@ -330,7 +381,7 @@ def deactivate_subscription_when_all_failed(event):
     subscription = attempt.__parent__
     if not _subscription_full(subscription, True):
         return
-
+    # XXX: Add logging here.
     # This is a very simple-minded approach. Something more featured
     # might involve a ratio of failed attempts? Over some sort of sliding window?
     # Or examining the time period?
@@ -341,6 +392,16 @@ def deactivate_subscription_when_all_failed(event):
         manager = subscription.__parent__ # type:PersistentWebhookSubscriptionManager
         manager.deactivateSubscription(subscription)
         subscription.status_message = _(u'Delivery suspended due to too many delivery failures.')
+
+
+@component.adapter(ILimitedApplicabilityPreconditionFailureWebhookSubscription,
+                   IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached)
+def deactivate_subscription_when_applicable_limit_exceeded(subscription, event):
+    # See comments in __call__. This is only sent when the limit is actually
+    # exceeded.
+    manager = subscription.__parent__
+    manager.deactivateSubscription(subscription)
+    subscription.status_message = _(u'Delivery suspended due to too many precondition failures.')
 
 
 @implementer(IWebhookSubscriptionManager)

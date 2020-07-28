@@ -90,6 +90,16 @@ def dispatch_webhook_event(data, event):
         - Determines if any of those actually apply to the *data*, and
           if so, joins the transaction to prepare for sending them.
 
+    .. important::
+
+       Checking whether a subscription is :term:`applicable`
+       depends on the security policy in use. Most security policies
+       inspect the object's lineage or location (walking up the ``__parent__`` tree)
+       so it's important to use this subscriber only for events where that part
+       of the object is intact. For example, it does not usually apply for
+       :class:`~.ObjectCreatedEvent`, but does for :class:`~.ObjectAddedEvent`.
+       See :doc:`configuration` for more.
+
     .. caution::
 
         This function assumes the global, thread-local transaction manager. If any

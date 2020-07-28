@@ -10,6 +10,8 @@ from __future__ import print_function
 from zope.interface import Interface
 from zope.interface import Attribute
 from zope.interface import taggedValue
+from zope.interface import implementer
+
 from zope.interface.interfaces import IInterface
 from zope.interface.interfaces import IObjectEvent
 from zope.interface.interfaces import ObjectEvent
@@ -580,7 +582,9 @@ class ILimitedAttemptWebhookSubscription(IWebhookSubscription):
         # Note that this is not a schema field, it's intended to be configured
         # on a class, or rarely, through direct intervention on a particular
         # subscription.
-        u'An integer giving approximately the number of delivery attempts this object will store.'
+        u'An integer giving approximately the number of delivery attempts this object will store. '
+        u'This is also used to deactivate the subscription when this many attempts in a row have '
+        u'failed.'
     )
 
 class ILimitedApplicabilityPreconditionFailureWebhookSubscription(IWebhookSubscription):
@@ -608,6 +612,7 @@ class IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached(IObjectEv
     )
 
 
+@implementer(IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached)
 class WebhookSubscriptionApplicabilityPreconditionFailureLimitReached(ObjectEvent):
 
     def __init__(self, subscription, failures):

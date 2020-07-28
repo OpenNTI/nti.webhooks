@@ -21,7 +21,7 @@ from nti.testing.zodb import ZODBLayer
 
 from nti.webhooks.delivery_manager import IExecutorService
 from nti.webhooks.interfaces import IWebhookDestinationValidator
-
+from nti.webhooks.interfaces import IWebhookDeliveryManager
 
 class UsingMocks(object):
     """
@@ -195,3 +195,11 @@ def target_validation_fails():
         gsm.unregisterUtility(new_validator)
         if old_validator is not None:
             gsm.registerUtility(old_validator)
+
+def wait_for_deliveries():
+    """
+    Queries the current :class:`nti.webhooks.interfaces.IWebhookDeliveryManager`
+    and asks it to wait for all pending deliveries.
+    """
+    delivery_man = component.getUtility(IWebhookDeliveryManager)
+    delivery_man.waitForPendingDeliveries()
