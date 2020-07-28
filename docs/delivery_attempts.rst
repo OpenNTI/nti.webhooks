@@ -263,6 +263,10 @@ per-principal.
 
 .. doctest::
 
+   >>> from nti.webhooks.interfaces import ILimitedAttemptWebhookSubscription
+   >>> from zope.interface import verify
+   >>> verify.verifyObject(ILimitedAttemptWebhookSubscription, subscription)
+   True
    >>> subscription.attempt_limit
    50
 
@@ -310,6 +314,14 @@ and as the newer attempts complete, they will replace them.
    False
    >>> attempt_50 in all_attempts
    True
+
+
+.. todo:: We need to test this case for failures, both
+          at HTTP delivery time, and at DNS domain validation time.
+          I suspect the DNS domain validation time won't work, because
+          there's no parent set yet when the event goes out.
+
+          This should result in deactivating the subscription.
 
 .. testcleanup::
 

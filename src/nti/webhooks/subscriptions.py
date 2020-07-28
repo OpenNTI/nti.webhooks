@@ -11,6 +11,7 @@ import sys
 import time
 
 from zope import component
+from zope.event import notify
 from zope.interface import Interface
 from zope.interface import implementer
 from zope.interface import providedBy
@@ -40,14 +41,20 @@ from zope.container.constraints import checkObject
 from zope.cachedescriptors.property import CachedProperty
 
 from nti.zodb.containers import time_to_64bit_int
+from nti.zodb.minmax import NumericPropertyDefaultingToZero
+from nti.zodb.minmax import NumericMinimum
+
 from nti.schema.fieldproperty import createDirectFieldProperties
 from nti.schema.schema import SchemaConfigured
 
 from nti.webhooks.interfaces import IWebhookDialect
 from nti.webhooks.interfaces import IWebhookSubscription
+from nti.webhooks.interfaces import ILimitedAttemptWebhookSubscription
+from nti.webhooks.interfaces import ILimitedApplicabilityPreconditionFailureWebhookSubscription
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
 from nti.webhooks.interfaces import IWebhookDestinationValidator
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptResolvedEvent
+from nti.webhooks.interfaces import WebhookSubscriptionApplicabilityPreconditionFailureLimitReached
 
 from nti.webhooks.attempts import WebhookDeliveryAttempt
 from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
@@ -82,7 +89,10 @@ class IApplicableSubscriptionFactory(Interface): # pylint:disable=inherit-non-cl
         """
 
 
-@implementer(IWebhookSubscription, IAttributeAnnotatable, IApplicableSubscriptionFactory)
+@implementer(ILimitedAttemptWebhookSubscription,
+             ILimitedApplicabilityPreconditionFailureWebhookSubscription,
+             IAttributeAnnotatable,
+             IApplicableSubscriptionFactory)
 class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     """
     Default, non-persistent implementation of `IWebhookSubscription`.
@@ -91,10 +101,12 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     to = u''
     active = None
     createDirectFieldProperties(IWebhookSubscription)
+    createDirectFieldProperties(ILimitedAttemptWebhookSubscription)
 
     __parent__ = None
 
     attempt_limit = 50
+    applicable_precondition_failure_limit = 50
 
     def __init__(self, **kwargs):
         SchemaConfigured.__init__(self, **kwargs)
@@ -192,14 +204,23 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             else:
                 endInteraction()
 
+    _delivery_applicable_precondition_failed = NumericPropertyDefaultingToZero(
+        '_delivery_applicable_precondition_failed',
+        # We have to use NumericMinimum instead of NumericMaximum or
+        # MergingCounter because we periodically reset to 0. And MergingCounter
+        # has a bug when that happens. (https://github.com/NextThought/nti.zodb/issues/6)
+        NumericMinimum,
+    )
+
     def __call__(self, data, event):
         # We're assumed applicable for the data and event, no need to double
         # check that.
         assert self.active
         if self.__checkSecurity(data):
             return self
-        # TODO: Here's where the cleanup would go, or at least incrementing a
-        # counter and sending events when its over a certain value.
+        failures = self._delivery_applicable_precondition_failed.increment()
+        if failures.value >= self.applicable_precondition_failure_limit:
+            notify(WebhookSubscriptionApplicabilityPreconditionFailureLimitReached(self, failures))
         return None
 
     @CachedProperty('dialect_id')
@@ -269,7 +290,9 @@ def prune_subscription_when_resolved(event):
     # type: (IWebhookDeliveryAttemptResolvedEvent) -> None
     attempt = event.object # type: WebhookDeliveryAttempt
     subscription = attempt.__parent__
-    if subscription is None or len(subscription) <= subscription.attempt_limit:
+    if not ILimitedAttemptWebhookSubscription.providedBy(subscription):
+        return
+    if len(subscription) <= subscription.attempt_limit:
         return
 
     # Copy to avoid concurrent modification. On PyPy, we've seen this

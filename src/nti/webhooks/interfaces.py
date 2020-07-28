@@ -12,6 +12,7 @@ from zope.interface import Attribute
 from zope.interface import taggedValue
 from zope.interface.interfaces import IInterface
 from zope.interface.interfaces import IObjectEvent
+from zope.interface.interfaces import ObjectEvent
 
 from zope.container.interfaces import IContainerNamesContainer
 from zope.container.interfaces import IContained
@@ -528,7 +529,6 @@ class IWebhookSubscription(IContainerNamesContainer):
         vocabulary=UtilityNames(IWebhookDialect),
     )
 
-    netloc = Attribute("The network host name portion of the URL.")
     dialect = Attribute("The resolved dialect to use for this subscription.")
 
     def isApplicable(data):
@@ -563,6 +563,50 @@ class IWebhookSubscription(IContainerNamesContainer):
         readonly=True,
     )
 
+
+class ILimitedAttemptWebhookSubscription(IWebhookSubscription):
+    """
+    A webhook subscription that should limit the number of
+    delivery attempts it stores.
+    """
+
+    attempt_limit = Attribute(
+        # Note that this is not a schema field, it's intended to be configured
+        # on a class, or rarely, through direct intervention on a particular
+        # subscription.
+        u'An integer giving approximately the number of delivery attempts this object will store.'
+    )
+
+class ILimitedApplicabilityPreconditionFailureWebhookSubscription(IWebhookSubscription):
+    """
+    A webhook subscription that supports a limit on the number
+    of times checking applicability can be allowed to fail.
+
+    When this number is exceeded, an event implementing
+    `IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached`
+    is notified.
+    """
+
+    applicable_precondition_failure_limit = Attribute(
+        # As for attempt_limit.
+        u'An integer giving the number of times applicability checks can fail '
+        u'before the event is generated.'
+    )
+
+class IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached(IObjectEvent):
+
+    failures = Attribute(
+        u"An instance of :class:`nti.zodb.interfaces.INumericValue`. "
+        u'You may set its ``value`` property to zero if you want to start the count '
+        u'over. Other actions would be to make this subscription inactive.'
+    )
+
+
+class WebhookSubscriptionApplicabilityPreconditionFailureLimitReached(ObjectEvent):
+
+    def __init__(self, subscription, failures):
+        ObjectEvent.__init__(self, subscription)
+        self.failures = failures
 
 class IWebhookSubscriptionRegistry(Interface):
 
