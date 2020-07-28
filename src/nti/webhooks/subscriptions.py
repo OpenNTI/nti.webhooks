@@ -47,6 +47,8 @@ from nti.zodb.minmax import NumericMinimum
 from nti.schema.fieldproperty import createDirectFieldProperties
 from nti.schema.schema import SchemaConfigured
 
+from nti.webhooks import MessageFactory as _
+
 from nti.webhooks.interfaces import IWebhookDialect
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks.interfaces import ILimitedAttemptWebhookSubscription
@@ -54,6 +56,7 @@ from nti.webhooks.interfaces import ILimitedApplicabilityPreconditionFailureWebh
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
 from nti.webhooks.interfaces import IWebhookDestinationValidator
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptResolvedEvent
+from nti.webhooks.interfaces import IWebhookDeliveryAttemptFailedEvent
 from nti.webhooks.interfaces import WebhookSubscriptionApplicabilityPreconditionFailureLimitReached
 
 from nti.webhooks.attempts import WebhookDeliveryAttempt
@@ -117,6 +120,9 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         # when there is a value in the __dict__ already.
         self.__dict__.pop('active', None)
         self.active = active
+        if active:
+            # Back to the default message
+            self.__dict__.pop('status_message', None)
 
     def pop(self):
         """Testing only. Removes and returns a random value."""
@@ -124,6 +130,11 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         v = self[k]
         del self[k]
         return v
+
+    def clear(self):
+        """Testing only. Removes all delivery attempts."""
+        for k in list(self.keys()):
+            del self[k]
 
     def _find_principal(self, data):
         principal = None
@@ -236,6 +247,17 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
         attempt = self._new_deliveryAttempt()
         attempt.payload_data = payload_data
 
+        # Store the attempt (make it contained by this object) before we
+        # conceivably change its status. Changing the status
+        # can fire events, and we need to know the parent for those events to
+        # work properly.
+
+        # Choose names that are easily sortable, since that's
+        # our iteration order.
+        now = str(time_to_64bit_int(time.time()))
+        name = INameChooser(self).chooseName(now, attempt) # pylint:disable=too-many-function-args,assignment-from-no-return
+        self[name] = attempt
+
         # Verify the destination. Fail early
         # if it doesn't pass.
         validator = component.getUtility(IWebhookDestinationValidator, u'', self)
@@ -250,14 +272,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             attempt.internal_info.storeExceptionInfo(sys.exc_info())
             attempt.status = 'failed' # This could cause pruning
 
-        # Store this once we have a final status. This could cause us to
-        # exceed our limit by one.
 
-        # Choose names that are easily sortable, since that's
-        # our iteration order.
-        now = str(time_to_64bit_int(time.time()))
-        name = INameChooser(self).chooseName(now, attempt) # pylint:disable=too-many-function-args,assignment-from-no-return
-        self[name] = attempt
         return attempt
 
     def __repr__(self):
@@ -285,14 +300,17 @@ class PersistentSubscription(Subscription, Persistent):
         return Subscription.__repr__(self)
 
 
+def _subscription_full(subscription, strict):
+    return ILimitedAttemptWebhookSubscription.providedBy(subscription) \
+        and len(subscription) > (subscription.attempt_limit - (1 if strict else 0))
+
+
 @component.adapter(IWebhookDeliveryAttemptResolvedEvent)
 def prune_subscription_when_resolved(event):
     # type: (IWebhookDeliveryAttemptResolvedEvent) -> None
     attempt = event.object # type: WebhookDeliveryAttempt
     subscription = attempt.__parent__
-    if not ILimitedAttemptWebhookSubscription.providedBy(subscription):
-        return
-    if len(subscription) <= subscription.attempt_limit:
+    if not _subscription_full(subscription, False):
         return
 
     # Copy to avoid concurrent modification. On PyPy, we've seen this
@@ -305,10 +323,28 @@ def prune_subscription_when_resolved(event):
                 break
 
 
+@component.adapter(IWebhookDeliveryAttemptFailedEvent)
+def deactivate_subscription_when_all_failed(event):
+    # type: (IWebhookDeliveryAttemptFailedEvent) -> None
+    attempt = event.object # type: WebhookDeliveryAttempt
+    subscription = attempt.__parent__
+    if not _subscription_full(subscription, True):
+        return
+
+    # This is a very simple-minded approach. Something more featured
+    # might involve a ratio of failed attempts? Over some sort of sliding window?
+    # Or examining the time period?
+    # This has to activate all the sub-objects, which could be expensive.
+    # We could make the subscription use BTree Length objects to track
+    # the various states.
+    if all(attempt.failed() for attempt in subscription.values()):
+        manager = subscription.__parent__ # type:PersistentWebhookSubscriptionManager
+        manager.deactivateSubscription(subscription)
+        subscription.status_message = _(u'Delivery suspended due to too many delivery failures.')
+
 
 @implementer(IWebhookSubscriptionManager)
 class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
-
 
     def __init__(self):
         super(PersistentWebhookSubscriptionManager, self).__init__()
@@ -366,7 +402,9 @@ class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
 
 @component.adapter(IWebhookSubscription, IRegistered)
 def sync_active_status_registered(subscription, _event):
+    # type: (Subscription, Any) -> None
     subscription._setActive(True) # pylint:disable=protected-access
+
 
 @component.adapter(IWebhookSubscription, IUnregistered)
 def sync_active_status_unregistered(subscription, _event):

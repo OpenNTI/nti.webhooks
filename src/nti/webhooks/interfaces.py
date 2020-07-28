@@ -563,6 +563,12 @@ class IWebhookSubscription(IContainerNamesContainer):
         readonly=True,
     )
 
+    status_message = Text(
+        title=u"Explanatory text about the state of this subscription.",
+        required=True,
+        default=u'Active',
+    )
+
 
 class ILimitedAttemptWebhookSubscription(IWebhookSubscription):
     """

@@ -2,6 +2,11 @@
  Delivery History
 ==================
 
+.. testsetup::
+
+   import logging
+   logging.basicConfig(level=logging.FATAL)
+
 .. currentmodule:: nti.webhooks.interfaces
 
 All attempts at delivering a webhook are recorded as an object that
@@ -315,13 +320,128 @@ and as the newer attempts complete, they will replace them.
    >>> attempt_50 in all_attempts
    True
 
+Automatic Deactivation on Failures
+----------------------------------
 
-.. todo:: We need to test this case for failures, both
-          at HTTP delivery time, and at DNS domain validation time.
-          I suspect the DNS domain validation time won't work, because
-          there's no parent set yet when the event goes out.
+If the history is completely filled up with failures, whether from
+validation errors, HTTP errors, or local processing errors, the
+subscription will be automatically marked inactive and future
+deliveries will not be attempted until it is manually activated again.
 
-          This should result in deactivating the subscription.
+.. note:: At this time, pending deliveries are exempted from
+          inactivating the subscription. This means a sudden large
+          burst of pending deliveries could be scheduled and
+          delivery attempted, even if all previous deliveries have failed.
+
+HTTP Failures
+~~~~~~~~~~~~~
+
+Here, we'll demonstrate this for HTTP failures.
+
+.. doctest::
+
+   >>> subscription.active
+   True
+   >>> print(subscription.status_message)
+   Active
+   >>> with http_requests_fail():
+   ...     deliver_some(100, note='this should fail remotely')
+   ...     wait_for_deliveries()
+   >>> len(subscription)
+   50
+   >>> all_attempts = list(subscription.values())
+   >>> list(set(attempt.status for attempt in all_attempts))
+   ['failed']
+   >>> subscription.active
+   False
+   >>> print(subscription.status_message)
+   Delivery suspended due to too many delivery failures.
+
+Attempting more deliveries of course doesn't change this deactivated subscription
+in any way.
+
+.. doctest::
+
+   >>> deliver_some(100)
+   >>> wait_for_deliveries()
+   >>> len(subscription)
+   50
+   >>> all_attempts == list(subscription.values())
+   True
+
+Local Failures
+~~~~~~~~~~~~~~
+
+Next, we'll demonstrate the same thing for processing failures. We must first
+clear and re-enable the subscription.
+
+.. doctest::
+
+   >>> def resetSubscription():
+   ...     sub_manager.activateSubscription(subscription)
+   ...     print(subscription.active)
+   ...     print(subscription.status_message)
+   ...     subscription.clear()
+   >>> resetSubscription()
+   True
+   Active
+
+With that out of the way, we can simulate processing failures, and show the same
+outcome as for HTTP failures.
+
+.. doctest::
+
+   >>> with processing_results_fail():
+   ...     deliver_some(100, note='this should fail locally')
+   ...     wait_for_deliveries()
+   >>> len(subscription)
+   50
+   >>> all_attempts = list(subscription.values())
+   >>> list(set(attempt.status for attempt in all_attempts))
+   ['failed']
+   >>> subscription.active
+   False
+   >>> print(subscription.status_message)
+   Delivery suspended due to too many delivery failures.
+   >>> deliver_some(100)
+   >>> wait_for_deliveries()
+   >>> len(subscription)
+   50
+   >>> all_attempts == list(subscription.values())
+   True
+
+Validation Failures
+~~~~~~~~~~~~~~~~~~~
+
+Finally, the same results occur for validation failures.
+
+.. doctest::
+
+   >>> resetSubscription()
+   True
+   Active
+   >>> from nti.webhooks.testing import target_validation_fails
+   >>> with target_validation_fails():
+   ...     deliver_some(100, note='this should fail validation')
+   ...     wait_for_deliveries()
+   >>> len(subscription)
+   50
+   >>> all_attempts = list(subscription.values())
+   >>> list(set(attempt.status for attempt in all_attempts))
+   ['failed']
+   >>> subscription.active
+   False
+   >>> print(subscription.status_message)
+   Delivery suspended due to too many delivery failures.
+   >>> deliver_some(100)
+   >>> wait_for_deliveries()
+   >>> len(subscription)
+   50
+   >>> all_attempts == list(subscription.values())
+   True
+
+
+.. todo:: Similar tests for repeatedly inapplicable subscriptions.
 
 .. testcleanup::
 

@@ -34,7 +34,8 @@ TODO
           created/modified time properties as ISO format strings, not
           numbers for zapier.
 .. todo:: Write events document.
-
+.. todo:: Implement IDCTimes in terms of the native object
+          properties. There's a helper function for this.
 
 Dynamic-subscriptions only
 --------------------------
@@ -46,8 +47,9 @@ Dynamic-subscriptions only
 .. todo::  Add test to add new subscription when manager already exists.
 .. todo::  API for deleting subscriptions. Probably done by finding
            all subscriptions for a resource/principal.
-.. todo::  Auto-deactivate subscriptions after: not finding principals, number of failed deliveries, etc.
-.. todo::  Auto-copy principal from interaction when none is given.
+.. todo::  Auto-deactivate subscriptions after: applicability failures
+           (e.g., not finding principals)
+.. todo::  Auto-copy principal from interaction when none is given in api?
 .. todo::  What about using nti.externalizations (?) "find primary interface"
            function as a generic ``IWebhookResourceDiscriminator``?
 .. todo::  Use the nti.zodb properties for the created/last modified time, as

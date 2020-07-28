@@ -20,6 +20,7 @@ from nti.testing.zodb import mock_db_trans
 from nti.testing.zodb import ZODBLayer
 
 from nti.webhooks.delivery_manager import IExecutorService
+from nti.webhooks.interfaces import IWebhookDestinationValidator
 
 
 class UsingMocks(object):
@@ -171,3 +172,26 @@ def processing_results_fail():
     with fudge.patch(path) as mock_proc:
         mock_proc.is_callable().raises(UnicodeError)
         yield
+
+@interface.implementer(IWebhookDestinationValidator)
+class _PhonyValidator(object):
+
+    def validateTarget(self, to):
+        raise Exception("Testing validation fails")
+
+@contextmanager
+def target_validation_fails():
+    """
+    A context manager, during which the default
+    webhook validator will fail all target lookups.
+    """
+    gsm = component.getGlobalSiteManager()
+    old_validator = gsm.queryUtility(IWebhookDestinationValidator)
+    new_validator = _PhonyValidator()
+    gsm.registerUtility(new_validator)
+    try:
+        yield
+    finally:
+        gsm.unregisterUtility(new_validator)
+        if old_validator is not None:
+            gsm.registerUtility(old_validator)
