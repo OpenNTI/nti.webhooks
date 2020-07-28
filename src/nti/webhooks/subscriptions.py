@@ -65,6 +65,7 @@ from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
 
 from persistent import Persistent
 
+logger = __import__('logging').getLogger(__name__)
 
 class _CheckObjectOnSetBTreeContainer(BTreeContainer):
     # XXX: Taken from nti.containers. Should publish that package.
@@ -127,6 +128,9 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             self.__dict__.pop('status_message', None)
             # Reset to 0
             del self._delivery_applicable_precondition_failed
+        # TODO: If we need to, this would be a good place to notify specific
+        # events about becoming in/active. The ``I[Un]Registered`` event we use to
+        # call *this* function can be used, but isn't obvious.
 
     def pop(self):
         """Testing only. Removes and returns a random value."""
@@ -273,7 +277,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
                 # See https://github.com/NextThought/nti.zodb/issues/7
                 failures.value += 1
             else:
-                failures = failures.increment()
+                failures = incr()
             # XXX: JAM: Why did I think checking it here was the best thing, instead
             # of just sending the event every time a failure occurs? Was I trying to
             # cut down on the chance of misusing the failure property? Trying to cut down
@@ -367,11 +371,17 @@ def prune_subscription_when_resolved(event):
     # Copy to avoid concurrent modification. On PyPy, we've seen this
     # produce ``IndexError: list index out of range`` in some tests.
     # This can be reproduced in CPython using PURE_PYTHON mode.
+    count = 0
     for key, stored_attempt in list(subscription.items()):
         if stored_attempt.resolved():
             del subscription[key]
+            count += 1
             if len(subscription) <= subscription.attempt_limit:
                 break
+    logger.debug(
+        "Pruned %d old delivery attempts from subscription %s",
+        count, subscription
+    )
 
 
 @component.adapter(IWebhookDeliveryAttemptFailedEvent)
@@ -381,7 +391,7 @@ def deactivate_subscription_when_all_failed(event):
     subscription = attempt.__parent__
     if not _subscription_full(subscription, True):
         return
-    # XXX: Add logging here.
+
     # This is a very simple-minded approach. Something more featured
     # might involve a ratio of failed attempts? Over some sort of sliding window?
     # Or examining the time period?
@@ -389,6 +399,10 @@ def deactivate_subscription_when_all_failed(event):
     # We could make the subscription use BTree Length objects to track
     # the various states.
     if all(attempt.failed() for attempt in subscription.values()):
+        logger.info(
+            "Deactivating webhook subscription %s due to too many delivery failures.",
+            subscription,
+        )
         manager = subscription.__parent__ # type:PersistentWebhookSubscriptionManager
         manager.deactivateSubscription(subscription)
         subscription.status_message = _(u'Delivery suspended due to too many delivery failures.')
@@ -399,6 +413,11 @@ def deactivate_subscription_when_all_failed(event):
 def deactivate_subscription_when_applicable_limit_exceeded(subscription, event):
     # See comments in __call__. This is only sent when the limit is actually
     # exceeded.
+    logger.info(
+        "Deactivating webhook subscription %s due to too many precondition failures.",
+        subscription,
+    )
+
     manager = subscription.__parent__
     manager.deactivateSubscription(subscription)
     subscription.status_message = _(u'Delivery suspended due to too many precondition failures.')
