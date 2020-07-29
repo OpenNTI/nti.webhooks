@@ -57,6 +57,52 @@ hierarchy of component registries using `zope.site
 through `persistent objects <https://persistent.readthedocs.io>`_,
 typically with `ZODB <https://zodb-docs.readthedocs.io>`_.
 
+Data Model (Subscription Combinations)
+--------------------------------------
+
+One of the motivating examples of this package is integration with
+`Zapier <https://zapier.com>`_ and more generally the notion of `REST
+Hooks <http://resthooks.org>`_.
+
+In this model, a configuration on a *server* (origin) that sends data
+to a *target* URL when events occur is called a *subscription.*
+Subscriptions are meant to include:
+
+#. An event name (or names) the subscription includes;
+#. A parent user or account relationship;
+#. A target URL; and
+#. Active vs inactive state.
+
+Subscription lookup must be performant, so the user and event name
+information for subscriptions should be fast to find.
+
+Here, event names are defined to "use the noun.verb dot syntax, IE:
+contact.create or lead.delete)." Using ``zope.event`` and
+``zope.component,`` this translates to the pair of object type or
+interface, and event type or interface. For example,
+``(IContentContainer, IObjectAddedEvent).``
+
+Zapier generates a unique target URL for each event name, so to get
+created (added), modified, and deleted resources for a single type of
+object there will be three different target URLs and thus three
+different subscriptions. In general, there's an *N* x *M* expansion of
+object types and event types to target URLs or subscriptions.
+
+This package implements this model directly. (You can of course use
+umbrella interfaces applied to multiple object or event types to send
+related events to a single subscription.) Aggregating data views of
+"all webhook deliveries for a type of object" or "all webhook
+deliveries for a type of event" for presentation purposes could
+be written, but isn't particularly natural given how its set up now.
+
+An important outcome of this model is that there's no need for any
+given HTTP request to explicitly include something that identifies the
+type of event; the default dialect (see below) assume that the URL
+includes everything the receiver needs for that and doesn't do
+anything like add an X-NTI-EventType header or add something to the
+JSON body. It can be a URL parameter or a whole different URL, doesn't
+matter.
+
 Out Of Scope
 ============
 

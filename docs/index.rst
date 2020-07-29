@@ -32,13 +32,23 @@ TODO
 .. todo:: Externalization for the objects defined here.
           Note that we will need to be able to support the
           created/modified time properties as ISO format strings, not
-          numbers for zapier.
-.. todo:: Write events document.
+          numbers for zapier. (This goes for all objects.)
+.. todo:: Write events document. Add specific events for subscription
+          in/activated.
 .. todo:: Implement IDCTimes in terms of the native object
           properties. There's a helper function for this.
 
 Dynamic-subscriptions only
 --------------------------
+
+.. todo::  Add ZCML directive equivalent of API function that registers
+           a persistent subscription manager. Since it's not a great
+           idea to look for IDatabase and open transactions at
+           zope.configuration time, this will take some work. Ideas:
+           Use some sort of global proxy object that, when applicable,
+           tries to do the same thing as the API function. Or, listen
+           for IDatabaseOpenedWithRoot message, accept a path to a
+           ISite in the directive.
 
 .. todo::  Removing subscriptions when principals are removed.
 .. todo::  Add dynamic subscription at higher level and find it too (we already
