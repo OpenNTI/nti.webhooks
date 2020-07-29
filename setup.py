@@ -18,6 +18,8 @@ TESTS_REQUIRE = [
     'zope.securitypolicy', # ZCML directives for granting/denying
     # Easy mocking of ``requests``.
     'responses',
+    # Simpler site setup than nti.site
+    'zope.app.appsetup',
 ]
 
 def _read(fname):
@@ -69,6 +71,7 @@ setup(
         'zope.componentvocabulary',
         'zope.vocabularyregistry',
         'zope.securitypolicy', # IPrincipalPermissionManager
+        'zope.generations', # schema installers
         'zope.site',
         'nti.site',
         'nti.zodb',
