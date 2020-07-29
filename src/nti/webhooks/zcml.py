@@ -8,6 +8,7 @@ from __future__ import division
 from __future__ import print_function
 
 from zope.configuration.fields import GlobalObject
+from zope.configuration.fields import Text
 
 from zope.interface import Interface
 
@@ -21,13 +22,12 @@ from nti.webhooks._schema import ObjectEventInterface
 
 class IStaticSubscriptionDirective(Interface):
     """
-    Define a static subscription.
+    Define a global, static, transient subscription.
 
     Static subscriptions are not persistent and live only in the
     memory of individual processes. Thus, failed deliveries cannot be
     re-attempted after process shutdown. And of course the delivery history
     is also transient and local to a process.
-
     """
 
     for_ = GlobalObject(
@@ -61,6 +61,28 @@ class IStaticSubscriptionDirective(Interface):
         required=False
     )
 
+
+class IStaticPersistentSubscriptionDirective(IStaticSubscriptionDirective):
+    """
+    Define a local, static, persistent subscription.
+
+    Local persistent subscriptions live in the ZODB database, beneath
+    some :class:`zope.site.interfaces.ILocalSiteManager`.
+
+    They are identified by a traversable path beginning from the root
+    of the database; note that this may not be the exact same as a
+    path exposed in the application because this path will need to
+    include the name of the root application object, while application
+    paths typically do not.
+
+    This package uses :mod:`zope.generations` to keep track of
+    registered subscriptions and synchronize the database with what is
+    in executed ZCML. Thus it is very important not to remove ZCML
+    directives, or only execute part of the ZCML configuration unless you intend
+    for the subscriptions not found in ZCML to be removed.
+    """
+
+    path = Text() # XXX: Need a Path field; the one from zope.configuration means a file path.
 
 def _static_subscription_action(subscription_kwargs):
     getGlobalSubscriptionManager().createSubscription(**subscription_kwargs)

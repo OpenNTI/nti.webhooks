@@ -1,6 +1,6 @@
-=========================================================
- Configured Global, Non-Persistent Webhook Subscriptions
-=========================================================
+====================================================
+ Configured Global, Transient Webhook Subscriptions
+====================================================
 
 .. currentmodule:: nti.webhooks.zcml
 
@@ -11,11 +11,20 @@
 
 The simplest type of webhook :term:`subscription` is one that is
 configured statically, typically at application startup time, and
-stores no persistent history. This package provides ZCML directives to
-facilitate this. The directives can either be used globally, creating
-subscriptions that are valid across the entire application, or can be
-scoped to a smaller portion of the application using
-`z3c.baseregistry`_.
+stores no persistent history (with the facilities provided by this
+package; applications may store their own history, perhaps by
+listening for :doc:`delivery events <events>`).
+
+This is useful for a number of scenarios, including:
+
+- Development;
+- Integration testing;
+- Fire-and-forget delivery of frequent events;
+- Simple applications.
+
+This package provides ZCML directives to facilitate this. The
+directives can either be used globally, creating subscriptions that
+are valid across the entire application.
 
 .. autointerface:: IStaticSubscriptionDirective
 
