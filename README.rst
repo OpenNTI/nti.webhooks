@@ -12,12 +12,13 @@
    :target: https://ntiwebhooks.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
 
-.. sphinx-include-begin
 
 This package provides the infrastructure and delivery mechanisms for a
 server to support webhook delivery. For complete details and the
 changelog, see the `documentation
 <http://ntiwebhooks.readthedocs.io/>`_.
+
+.. sphinx-include-begin-prelude
 
 Webhooks
 ========
@@ -102,6 +103,8 @@ includes everything the receiver needs for that and doesn't do
 anything like add an X-NTI-EventType header or add something to the
 JSON body. It can be a URL parameter or a whole different URL, doesn't
 matter.
+
+.. sphinx-include-after-prelude
 
 Out Of Scope
 ============

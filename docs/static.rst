@@ -1,6 +1,6 @@
-==============================
- Static Webhook Subscriptions
-==============================
+=========================================================
+ Configured Global, Non-Persistent Webhook Subscriptions
+=========================================================
 
 .. currentmodule:: nti.webhooks.zcml
 
@@ -10,11 +10,12 @@
 
 
 The simplest type of webhook :term:`subscription` is one that is
-configured statically, typically at application startup time. This
-package provides ZCML directives to facilitate this. The directives
-can either be used globally, creating subscriptions that are valid
-across the entire application, or can be scoped to a smaller portion
-of the application using `z3c.baseregistry`_.
+configured statically, typically at application startup time, and
+stores no persistent history. This package provides ZCML directives to
+facilitate this. The directives can either be used globally, creating
+subscriptions that are valid across the entire application, or can be
+scoped to a smaller portion of the application using
+`z3c.baseregistry`_.
 
 .. autointerface:: IStaticSubscriptionDirective
 
@@ -256,6 +257,8 @@ But it does record a failed attempt in the subscription:
 
 Inactive Subscriptions
 ======================
+
+.. XXX: This doesn't really belong here.
 
 Subscriptions can be deactivated (made :term:`inactive`) by asking the
 manager to do this. The subscription manager is always the subscription's parent,
