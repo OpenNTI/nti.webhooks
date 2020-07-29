@@ -153,6 +153,7 @@ class WebhookDataManager(object):
         for subscription in subscriptions:
             # pylint:disable=protected-access
             if IPersistent.providedBy(subscription) and subscription._p_jar and subscription._p_oid:
+                # See comment below for why we must do this.
                 subscription._p_jar.register(subscription)
 
 
@@ -179,6 +180,9 @@ class WebhookDataManager(object):
     # which in turn registers with the transaction, as soon as they are added to this
     # data manager. Another approach would be to add a before-commit transaction hook
     # to the transaction that does the same thing.
+    #
+    # Another option might be to create the delivery attempt much earlier? But
+    # that would forbid any attempt from coalescing events, wouldn't it.
 
     @foreign_transaction
     def tpc_begin(self, transaction):

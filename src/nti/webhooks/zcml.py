@@ -66,6 +66,7 @@ def _static_subscription_action(subscription_kwargs):
     getGlobalSubscriptionManager().createSubscription(**subscription_kwargs)
 
 def static_subscription(context, **kwargs):
+    # type: (zope.configuration.config.ConfigurationMachine, dict) -> None
     to = kwargs.pop('to')
     for_ = kwargs.pop('for_', None) or IStaticSubscriptionDirective['for_'].default
     when = kwargs.pop('when', None) or IStaticSubscriptionDirective['when'].default
@@ -88,5 +89,8 @@ def static_subscription(context, **kwargs):
         # as you want.
         discriminator=None,
         callable=_static_subscription_action,
-        args=(subscription_kwargs,)
+        args=(subscription_kwargs,),
+        # Try to execute towards the end so any validation that needs
+        # previous directives, like permission lookup, can work.
+        order=9999
     )

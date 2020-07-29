@@ -1,6 +1,5 @@
 import transaction
 from zope import lifecycleevent
-from zope import component
 from zope import interface
 from zope.container.folder import Folder
 from zope.securitypolicy.interfaces import IPrincipalPermissionManager
@@ -8,7 +7,12 @@ from zope.annotation.interfaces import IAttributeAnnotatable
 
 from nti.testing.time import time_monotonically_increases
 
-from nti.webhooks.interfaces import IWebhookDeliveryManager
+from nti.webhooks.testing import wait_for_deliveries
+
+__all__ = [
+    'deliver_some',
+    'wait_for_deliveries',
+]
 
 @time_monotonically_increases
 def deliver_some(how_many=1, note=None, grants=None):
@@ -26,7 +30,3 @@ def deliver_some(how_many=1, note=None, grants=None):
                 prin_perm.grantPermissionToPrincipal(perm_id, principal_id)
         lifecycleevent.created(content)
         transaction.commit()
-
-def wait_for_deliveries():
-    delivery_man = component.getUtility(IWebhookDeliveryManager)
-    delivery_man.waitForPendingDeliveries()

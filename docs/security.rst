@@ -139,7 +139,17 @@ permission by default. Let's reverse that and check again.
    >>> [subscription.isApplicable(event.object) for subscription in subscriptions]
    [False]
 
-Ahh, that's better.
+Ahh, that's better. We could have also disabled that behaviour.
+
+.. note:: Dynamic (persistent) subscriptions do not fallback to the unauthenticated
+          principal by default.
+
+.. doctest::
+
+   >>> subscriptions[0].fallback_to_unauthenticated_principal
+   True
+   >>> subscriptions[0].fallback_to_unauthenticated_principal = False
+
 
 Subscription Applicable Once Principals are Defined
 ---------------------------------------------------
@@ -210,7 +220,99 @@ permission check will fail.
    ...    [subscription.isApplicable(event.object) for subscription in subscriptions]
    [False]
 
+Automatic Deactivation On Failure
+=================================
 
+For any type of subscription (static, dynamic, persistent, ...) that
+implements
+:class:`nti.webhooks.interfaces.ILimitedApplicabilityPreconditionFailureWebhookSubscription`,
+attempting to make deliveries to it while it is misconfigured (e.g.,
+there is no such permission defined or no principal can be found) will
+eventually result in it becoming automatically disabled.
+
+Our subscription is such an object:
+
+.. doctest::
+
+   >>> from nti.webhooks.interfaces import ILimitedApplicabilityPreconditionFailureWebhookSubscription
+   >>> from zope.interface import verify
+   >>> subscription = subscriptions[0]
+   >>> verify.verifyObject(ILimitedApplicabilityPreconditionFailureWebhookSubscription, subscription)
+   True
+   >>> subscription.applicable_precondition_failure_limit
+   50
+   >>> subscription.active
+   True
+   >>> print(subscription.status_message)
+   Active
+
+This doesn't apply when the permission check is simply denied; that's
+normal and expected.
+
+.. doctest::
+
+   >>> from delivery_helper import deliver_some
+   >>> from nti.webhooks.testing import wait_for_deliveries
+   >>> with interaction('some.one.else'):
+   ...      deliver_some(100)
+   >>> len(subscription)
+   0
+   >>> subscription.active
+   True
+
+But if we remove the principal our subscription is using (being
+careful not to fire any events that might automatically remove or
+deactivate the subscription) we can see that it becomes inactive at
+the correct time.
+
+First, we'll deliver one, just to prove it works.
+
+.. doctest::
+
+   >>> deliver_some()
+   >>> wait_for_deliveries()
+   >>> len(subscription)
+   1
+
+Now we'll destroy the principal registration, making this object
+incapable of accepting deliveries. (This works because we disabled the
+fallback to the unauthenticated principal earlier.)
+
+.. doctest::
+
+   >>> from zope.principalregistry import principalregistry
+   >>> principalregistry.principalRegistry._clear()
+
+When we attempt enough of them, it is deactivated.
+
+.. doctest::
+
+   >>> deliver_some(49)
+   >>> len(subscription)
+   1
+   >>> subscription.active
+   True
+   >>> deliver_some(2)
+   >>> len(subscription)
+   1
+   >>> subscription.active
+   False
+   >>> print(subscription.status_message)
+   Delivery suspended due to too many precondition failures.
+
+Manually activating the subscription resets the counter.
+
+.. doctest::
+
+   >>> subscription.__parent__.activateSubscription(subscription)
+   True
+   >>> subscription.active
+   True
+   >>> print(subscription.status_message)
+   Active
+   >>> deliver_some(50)
+   >>> subscription.active
+   False
 
 .. testcleanup::
 

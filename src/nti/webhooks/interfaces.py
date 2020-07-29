@@ -10,8 +10,11 @@ from __future__ import print_function
 from zope.interface import Interface
 from zope.interface import Attribute
 from zope.interface import taggedValue
+from zope.interface import implementer
+
 from zope.interface.interfaces import IInterface
 from zope.interface.interfaces import IObjectEvent
+from zope.interface.interfaces import ObjectEvent
 
 from zope.container.interfaces import IContainerNamesContainer
 from zope.container.interfaces import IContained
@@ -528,7 +531,6 @@ class IWebhookSubscription(IContainerNamesContainer):
         vocabulary=UtilityNames(IWebhookDialect),
     )
 
-    netloc = Attribute("The network host name portion of the URL.")
     dialect = Attribute("The resolved dialect to use for this subscription.")
 
     def isApplicable(data):
@@ -539,6 +541,8 @@ class IWebhookSubscription(IContainerNamesContainer):
         This does not take into account whether this subscription is
         active or not, but does take into account the permission and principal
         declared for the subscription as well as the type/interface.
+
+        This is a query method that does not mutate this object.
         """
 
     def createDeliveryAttempt(payload_data):
@@ -561,7 +565,88 @@ class IWebhookSubscription(IContainerNamesContainer):
         readonly=True,
     )
 
-class IWebhookSubscriptionManager(IContainerNamesContainer):
+    status_message = Text(
+        title=u"Explanatory text about the state of this subscription.",
+        required=True,
+        default=u'Active',
+    )
+
+
+class ILimitedAttemptWebhookSubscription(IWebhookSubscription):
+    """
+    A webhook subscription that should limit the number of
+    delivery attempts it stores.
+    """
+
+    attempt_limit = Attribute(
+        # Note that this is not a schema field, it's intended to be configured
+        # on a class, or rarely, through direct intervention on a particular
+        # subscription.
+        u'An integer giving approximately the number of delivery attempts this object will store. '
+        u'This is also used to deactivate the subscription when this many attempts in a row have '
+        u'failed.'
+    )
+
+class ILimitedApplicabilityPreconditionFailureWebhookSubscription(IWebhookSubscription):
+    """
+    A webhook subscription that supports a limit on the number
+    of times checking applicability can be allowed to fail.
+
+    When this number is exceeded, an event implementing
+    `IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached`
+    is notified.
+    """
+
+    applicable_precondition_failure_limit = Attribute(
+        # As for attempt_limit.
+        u'An integer giving the number of times applicability checks can fail '
+        u'before the event is generated.'
+    )
+
+class IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached(IObjectEvent):
+
+    failures = Attribute(
+        u"An instance of :class:`nti.zodb.interfaces.INumericValue`. "
+        u'You may set its ``value`` property to zero if you want to start the count '
+        u'over. Other actions would be to make this subscription inactive.'
+    )
+
+
+@implementer(IWebhookSubscriptionApplicabilityPreconditionFailureLimitReached)
+class WebhookSubscriptionApplicabilityPreconditionFailureLimitReached(ObjectEvent):
+
+    def __init__(self, subscription, failures):
+        ObjectEvent.__init__(self, subscription)
+        self.failures = failures
+
+class IWebhookSubscriptionRegistry(Interface):
+
+    def activeSubscriptions(data, event):
+        """
+        Find active subscriptions for the *data* and the *event*.
+
+        This is a simple query method and does not result in any status changes
+        or signal an intent to deliver.
+
+        :return: A sequence of subscriptions.
+        """
+
+    def subscriptionsToDeliver(data, event):
+        """
+        Find subscriptions that are both active and applicable for the
+        *data* and the *event*.
+
+        Subscriptions that are active, but not applicable, due to
+        circumstances unrelated to the data and event (for example,
+        the permission is not available, or the principal or dialect
+        cannot be found) may be removed from the active set of subscriptions
+        for future calls to this method and :meth:`activeSubscriptions`.
+
+        :return: A sequence of subscriptions.
+        """
+
+class IWebhookSubscriptionManager(IWebhookSubscriptionRegistry,
+                                  IContainerNamesContainer):
     """
     A utility that manages subscriptions.
 
