@@ -14,6 +14,8 @@
    # complains by logging. Silence that.
    import logging
    logging.getLogger('zope.app.appsetup').setLevel(logging.CRITICAL)
+   from nti.webhooks.testing import ZODBFixture
+   ZODBFixture.setUp()
 
 A step between :doc:`global, static, transient subscriptions
 <static>` and :doc:`local, runtime-installed history-free
@@ -53,13 +55,14 @@ haven't established one yet. Let's do that.
 .. doctest::
 
    >>> from nti.site.testing import print_tree
-   >>> from ZODB import DB, DemoStorage
-   >>> db = DB(DemoStorage.DemoStorage())
-   >>> conn = db.open()
+   >>> from nti.webhooks.testing import DoctestTransaction
+   >>> tx = DoctestTransaction()
+   >>> db = tx.db
+   >>> conn = tx.begin()
    >>> root = conn.root()
    >>> print_tree(root, depth=0, details=('len',))
    <Connection Root Dictionary> len=0
-   >>> conn.close()
+   >>> tx.finish()
 
 Of course, creating the database by itself does nothing. Like most
 things, ``zope.app.appsetup`` is based on events. Including its
@@ -73,7 +76,7 @@ event that needs to be sent is
    >>> from zope.event import notify
    >>> notify(DatabaseOpened(db))
    >>> def show_trees():
-   ...     conn = db.open()
+   ...   with tx as conn:
    ...     root = conn.root()
    ...     print_tree(root,
    ...                depth=0,
@@ -81,7 +84,6 @@ event that needs to be sent is
    ...                details=('len', 'siteManager'),
    ...                basic_indent='  ',
    ...                known_types=(int, tuple,))
-   ...     conn.close()
    >>> show_trees()
    <Connection Root Dictionary> len=1
       <ISite,IRootFolder>: Application len=0
@@ -136,7 +138,7 @@ installed.
    ...   <webhooks:persistentSubscription
    ...             site_path="/Application"
    ...             for="zope.container.interfaces.IContentContainer"
-   ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
    ...             to="https://example.com" />
    ... </configure>
    ... """
@@ -202,6 +204,137 @@ same ZCML again and re-notify the database opening, nothing in the database chan
         zzzz-nti.webhooks => 1
 
 
+Delivering To The Subscription
+==============================
+
+Delivering to the subscription can happen in two ways. We'll use the same helper function
+in both examples.
+
+.. doctest::
+
+   >>> from nti.testing.time import time_monotonically_increases
+   >>> from nti.webhooks.testing import wait_for_deliveries
+   >>> from zope.container.folder import Folder
+   >>> from zope import lifecycleevent
+   >>> @time_monotonically_increases
+   ... def deliver_one(content=None):
+   ...       content = Folder() if content is None else content
+   ...       lifecycleevent.modified(content)
+   >>> from nti.webhooks.testing import mock_delivery_to
+   >>> mock_delivery_to('https://example.com', method='POST', status=200)
+
+.. rubric:: The Site Is The Active Site
+
+First, if that site is the current active site, a matching resource
+and event will trigger delivery.
+
+.. doctest::
+
+   >>> from zope.traversing import api as ztapi
+   >>> from zope.component.hooks import site as active_site
+   >>> with tx as conn:
+   ...     site = conn.root.Application
+   ...     with active_site(site):
+   ...         deliver_one()
+   >>> wait_for_deliveries()
+   >>> show_trees()
+   <Connection Root Dictionary> len=3
+      <ISite,IRootFolder>: Application len=0
+        <Site Manager> name=++etc++site len=1
+          default len=4
+            CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
+            PersistentSessionDataContainer len=0
+            RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
+            WebhookSubscriptionManager len=1
+              PersistentSubscription len=1
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+      zope.generations len=1
+        zzzz-nti.webhooks => 1
+
+Note how the ``PersistentSubscription`` has gained a delivery attempt.
+
+.. rubric:: In The Context Of The Site
+
+Second, if something were to happen to an object within the context
+(beneath) that site, then, no matter what the active site is, delivery will
+be attempted.
+
+.. doctest::
+
+   >>> from zope import component
+   >>> with tx as conn:
+   ...    site = conn.root.Application
+   ...    assert component.getSiteManager() is component.getGlobalSiteManager()
+   ...    site['Folder'] = Folder()
+   ...    deliver_one(site['Folder'])
+   >>> wait_for_deliveries()
+   >>> show_trees()
+   <Connection Root Dictionary> len=3
+      <ISite,IRootFolder>: Application len=1
+        Folder len=0
+        <Site Manager> name=++etc++site len=1
+          default len=4
+            CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
+            PersistentSessionDataContainer len=0
+            RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
+            WebhookSubscriptionManager len=1
+              PersistentSubscription len=3
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+      zope.generations len=1
+        zzzz-nti.webhooks => 1
+
+The number of delivery attempts has again grown.
+
+.. important::
+
+   But why did it grow by *two* new delivery attempts? We only tried
+   to deliver one event.
+
+   The answer is that adding the folder to the site first sent a
+   :class:`zope.container.contained.ContainerModifiedEvent` for the
+   site folder itself, and then we sent a modified event for the
+   folder we just created. The site and its ``ContainerModifiedEvent``
+   matched our subscription filter.
+
+   This is a reminder to be careful about the subscription filters or
+   the :doc:`configuration` you choose.
+
+.. rubric:: Neither Of The Above
+
+Finally, we'll prove that if the site isn't the current site, and the object being
+modified isn't in the context of that site, no delivery is attempted.
+
+.. doctest::
+
+   >>> with tx as conn:
+   ...    assert component.getSiteManager() is component.getGlobalSiteManager()
+   ...    deliver_one()
+   >>> wait_for_deliveries()
+   >>> show_trees()
+   <Connection Root Dictionary> len=3
+      <ISite,IRootFolder>: Application len=1
+        Folder len=0
+        <Site Manager> name=++etc++site len=1
+          default len=4
+            CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
+            PersistentSessionDataContainer len=0
+            RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
+            WebhookSubscriptionManager len=1
+              PersistentSubscription len=3
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+      zope.generations len=1
+        zzzz-nti.webhooks => 1
+
+As we can see, nothing changed.
+
+
 .. todo:: Deliver to the subscription, both with and without the site active.
 .. todo:: Add a new subscription, verify the old subscription is unchanged.
 .. todo:: Mutate one of the definitions, verify that a new subscription is created while the old
@@ -213,4 +346,4 @@ same ZCML again and re-notify the database opening, nothing in the database chan
    from zope.testing import cleanup
    cleanup.cleanUp()
    ro.C3.STRICT_IRO = ro._ClassBoolFromEnv()
-   db.close()
+   ZODBFixture.tearDown()

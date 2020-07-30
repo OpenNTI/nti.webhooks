@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 @time_monotonically_increases
-def deliver_some(how_many=1, note=None, grants=None):
+def deliver_some(how_many=1, note=None, grants=None, event='created'):
     for _ in range(how_many):
         tx = transaction.begin()
         if note:
@@ -28,5 +28,6 @@ def deliver_some(how_many=1, note=None, grants=None):
             prin_perm = IPrincipalPermissionManager(content)
             for principal_id, perm_id in grants.items():
                 prin_perm.grantPermissionToPrincipal(perm_id, principal_id)
-        lifecycleevent.created(content)
+        sender = getattr(lifecycleevent, event)
+        sender(content)
         transaction.commit()
