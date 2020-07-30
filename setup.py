@@ -73,7 +73,7 @@ setup(
         'zope.securitypolicy', # IPrincipalPermissionManager
         'zope.generations', # schema installers
         'zope.site',
-        'nti.site',
+        'nti.site >= 2.2.0',
         'nti.zodb',
         'nti.externalization >= 2.0.0', # Consistent interface resolution order
         'nti.schema',

@@ -54,12 +54,16 @@ def subscribe_to_resource(resource, to, for_=None,
 
     site_manager = getSiteManager(resource)
     return subscribe_in_site_manager(site_manager,
-                                     to=to, for_=for_, when=when,
-                                     dialect_id=dialect_id,
-                                     owner_id=owner_id,
-                                     permission_id=permission_id)
+                                     dict(
+                                         to=to, for_=for_, when=when,
+                                         dialect_id=dialect_id,
+                                         owner_id=owner_id,
+                                         permission_id=permission_id))
 
-def subscribe_in_site_manager(site_manager, **subscription_kwargs):
+DEFAULT_UTILITY_NAME = 'WebhookSubscriptionManager'
+
+def subscribe_in_site_manager(site_manager, subscription_kwargs,
+                              utility_name=DEFAULT_UTILITY_NAME):
     """
     Produce and return a persistent ``IWebhookSubscription`` in the
     given site manager.
@@ -67,8 +71,10 @@ def subscribe_in_site_manager(site_manager, **subscription_kwargs):
     The *subscription_kwargs* are as for
     :meth:`nti.webhooks.interfaces.IWebhookSubscriptionManager.createSubscription`.
     No defaults are applied here.
+
+    The *utility_name* can be used to namespace subscriptions.
+    It must never be empty.
     """
-    sub_name = 'WebhookSubscriptionManager'
     if IContainer.providedBy(site_manager):
         # The preferred location for utilities is in the 'default'
         # child: A SiteManagementFolder. But not every site manager
@@ -79,10 +85,14 @@ def subscribe_in_site_manager(site_manager, **subscription_kwargs):
             parent = ztapi.traverse(site_manager, 'default')
         except LocationError:
             parent = site_manager
-        sub_manager = parent.get(sub_name) # pylint:disable=no-member
+        sub_manager = parent.get(utility_name) # pylint:disable=no-member
         if sub_manager is None:
-            sub_manager = parent[sub_name] = PersistentWebhookSubscriptionManager()
-            site_manager.registerUtility(sub_manager, IWebhookSubscriptionManager)
+            sub_manager = parent[utility_name] = PersistentWebhookSubscriptionManager()
+            site_manager.registerUtility(
+                sub_manager,
+                IWebhookSubscriptionManager,
+                name=utility_name if utility_name != DEFAULT_UTILITY_NAME else ''
+            )
     else:
         # Perhaps we should fail?
         sub_manager = site_manager.getUtility(IWebhookSubscriptionManager)

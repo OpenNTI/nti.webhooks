@@ -76,12 +76,18 @@ event that needs to be sent is
    >>> from zope.event import notify
    >>> notify(DatabaseOpened(db))
    >>> def show_trees():
+   ...   def extra_details(obj):
+   ...       from nti.webhooks.interfaces import IWebhookSubscription
+   ...       if IWebhookSubscription.providedBy(obj):
+   ...          return ['to=%s' % (obj.to,), 'active=%s' % (obj.active,)]
+   ...       return ()
    ...   with tx as conn:
    ...     root = conn.root()
    ...     print_tree(root,
    ...                depth=0,
    ...                show_unknown=type,
    ...                details=('len', 'siteManager'),
+   ...                extra_details=extra_details,
    ...                basic_indent='  ',
    ...                known_types=(int, tuple,))
    >>> show_trees()
@@ -175,9 +181,9 @@ added to the root of the database.
             CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
             PersistentSessionDataContainer len=0
             RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
-            WebhookSubscriptionManager len=1
-              PersistentSubscription len=0
-      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+            ZCMLWebhookSubscriptionManager len=1
+              PersistentSubscription len=0 to=https://example.com active=True
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
       zope.generations len=1
         zzzz-nti.webhooks => 1
 
@@ -197,9 +203,9 @@ same ZCML again and re-notify the database opening, nothing in the database chan
             CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
             PersistentSessionDataContainer len=0
             RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
-            WebhookSubscriptionManager len=1
-              PersistentSubscription len=0
-      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+            ZCMLWebhookSubscriptionManager len=1
+              PersistentSubscription len=0 to=https://example.com active=True
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
       zope.generations len=1
         zzzz-nti.webhooks => 1
 
@@ -245,10 +251,10 @@ and event will trigger delivery.
             CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
             PersistentSessionDataContainer len=0
             RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
-            WebhookSubscriptionManager len=1
-              PersistentSubscription len=1
+            ZCMLWebhookSubscriptionManager len=1
+              PersistentSubscription len=1 to=https://example.com active=True
                 ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
-      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
       zope.generations len=1
         zzzz-nti.webhooks => 1
 
@@ -278,12 +284,12 @@ be attempted.
             CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
             PersistentSessionDataContainer len=0
             RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
-            WebhookSubscriptionManager len=1
-              PersistentSubscription len=3
+            ZCMLWebhookSubscriptionManager len=1
+              PersistentSubscription len=3 to=https://example.com active=True
                 ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
                 ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
                 ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
-      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
       zope.generations len=1
         zzzz-nti.webhooks => 1
 
@@ -323,23 +329,186 @@ modified isn't in the context of that site, no delivery is attempted.
             CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
             PersistentSessionDataContainer len=0
             RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
-            WebhookSubscriptionManager len=1
-              PersistentSubscription len=3
+            ZCMLWebhookSubscriptionManager len=1
+              PersistentSubscription len=3 to=https://example.com active=True
                 ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
                 ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
                 ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
-      nti.webhooks.generations.PersistentWebhookSchemaManager len=2 => ((('/Application',...
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
       zope.generations len=1
         zzzz-nti.webhooks => 1
 
 As we can see, nothing changed.
 
 
-.. todo:: Deliver to the subscription, both with and without the site active.
-.. todo:: Add a new subscription, verify the old subscription is unchanged.
-.. todo:: Mutate one of the definitions, verify that a new subscription is created while the old
-          one is deactivated.
-.. todo:: Likewise for removing a definition.
+Mutating Subscriptions
+======================
+
+Over time, the ZCHL configuration is likely to change. Subscriptions
+will be added, removed, or (in rare cases) updated.
+
+.. tip::
+
+   Note that subscriptions are identified by their parameters in the
+   ZCML. Changing any of those parameters counts as a new
+   subscription and a deactivation of the old subscription.
+
+When that happens, the schema manager will make the appropriate
+adjustments. For additions, a new subscription will be created;
+existing subscriptions will be unchanged.
+
+.. doctest::
+
+   >>> zcml_string = """
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="nti.webhooks" file="meta.zcml" />
+   ...   <include package="zope.generations" file="subscriber.zcml" />
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com" />
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com/another/path" />
+   ... </configure>
+   ... """
+   >>> _ = xmlconfig.string(zcml_string)
+   >>> notify(DatabaseOpened(db))
+   >>> show_trees()
+   <Connection Root Dictionary> len=3
+      <ISite,IRootFolder>: Application len=1
+        Folder len=0
+        <Site Manager> name=++etc++site len=1
+          default len=4
+            CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
+            PersistentSessionDataContainer len=0
+            RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
+            ZCMLWebhookSubscriptionManager len=2
+              PersistentSubscription len=3 to=https://example.com active=True
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+              PersistentSubscription-2 len=0 to=https://example.com/another/path active=True
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
+      zope.generations len=1
+        zzzz-nti.webhooks => 2
+
+Notice the addition of a new subscription, and the increment of the generation.
+
+Now we'll try something a bit more complex. We'll add a new
+subscription *above* the existing subscriptions, "mutate" one of the
+existing subscriptions, and completely remove one by commenting it
+out.
+
+.. doctest::
+
+   >>> zcml_string = """
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="nti.webhooks" file="meta.zcml" />
+   ...   <include package="zope.generations" file="subscriber.zcml" />
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com/ThisIsNew" />
+   ...   <!-- Comment out this one
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com" />
+   ...   -->
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com/another/path" />
+   ... </configure>
+   ... """
+   >>> _ = xmlconfig.string(zcml_string)
+   >>> notify(DatabaseOpened(db))
+   >>> show_trees()
+   <Connection Root Dictionary> len=3
+      <ISite,IRootFolder>: Application len=1
+        Folder len=0
+        <Site Manager> name=++etc++site len=1
+          default len=4
+            CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
+            PersistentSessionDataContainer len=0
+            RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
+            ZCMLWebhookSubscriptionManager len=3
+              PersistentSubscription len=3 to=https://example.com active=False
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+              PersistentSubscription-2 len=0 to=https://example.com/another/path active=True
+              PersistentSubscription-3 len=0 to=https://example.com/ThisIsNew active=True
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
+      zope.generations len=1
+        zzzz-nti.webhooks => 3
+
+We can see the addition of a new subscription. The one we deleted is
+still present in the database, but in fact it was deactivated. What happens if we
+uncomment it?
+
+   >>> zcml_string = """
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="nti.webhooks" file="meta.zcml" />
+   ...   <include package="zope.generations" file="subscriber.zcml" />
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com/ThisIsNew" />
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com" />
+   ...   <webhooks:persistentSubscription
+   ...             site_path="/Application"
+   ...             for="zope.container.interfaces.IContentContainer"
+   ...             when="zope.lifecycleevent.interfaces.IObjectModifiedEvent"
+   ...             to="https://example.com/another/path" />
+   ... </configure>
+   ... """
+   >>> _ = xmlconfig.string(zcml_string)
+   >>> notify(DatabaseOpened(db))
+   >>> show_trees()
+   <Connection Root Dictionary> len=3
+      <ISite,IRootFolder>: Application len=1
+        Folder len=0
+        <Site Manager> name=++etc++site len=1
+          default len=4
+            CookieClientIdManager => <class 'zope.session.http.CookieClientIdManager'>
+            PersistentSessionDataContainer len=0
+            RootErrorReportingUtility => <class 'zope.error.error.RootErrorReportingUtility'>
+            ZCMLWebhookSubscriptionManager len=4
+              PersistentSubscription len=3 to=https://example.com active=False
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+                ... => <class 'nti.webhooks.attempts.PersistentWebhookDeliveryAttempt'>
+              PersistentSubscription-2 len=0 to=https://example.com/another/path active=True
+              PersistentSubscription-3 len=0 to=https://example.com/ThisIsNew active=True
+              PersistentSubscription-4 len=0 to=https://example.com active=True
+      nti.webhooks.generations.PersistentWebhookSchemaManager => <class 'nti.webhooks.generations.State'>
+      zope.generations len=1
+        zzzz-nti.webhooks => 4
+
+A new subscription is added. No attempt is made to re-activate a
+previously existing deactivated subscription.
 
 .. testcleanup::
 
