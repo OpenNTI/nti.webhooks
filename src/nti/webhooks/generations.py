@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """
+Internal API only, not for public consumption.
+
     - We have an IInstallableSchemaManager global utility. ZCML
       directives register their arguments with this utility.
 
@@ -25,13 +27,18 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import contextlib
+
 from transaction import TransactionManager
 
 from zope import interface
 from zope import component
+from zope.traversing import api as ztapi
 
 from zope.processlifetime import IDatabaseOpened
 from zope.generations.interfaces import IInstallableSchemaManager
+
+from nti.webhooks.api import subscribe_in_site_manager
 
 class IPersistentWebhookSchemaManager(IInstallableSchemaManager):
     """
@@ -56,19 +63,41 @@ class IPersistentWebhookSchemaManager(IInstallableSchemaManager):
 class PersistentWebhookSchemaManager(object):
 
     key = 'nti.webhooks.generations.PersistentWebhookSchemaManager'
+    utility_name = 'zzzz-nti.webhooks'
 
     def __init__(self):
         self.__generation = None
-        # XXX: When can we calculate the generation we need?
-        # That might have to be in an IDatabaseOpened event
         self.__subscription_accumulator = []
 
     def evolve(self, context, generation):
-        raise Exception
+        pass
 
     def install(self, context):
-        print("Asked to install")
-        raise Exception
+        conn = context.connection
+        root = conn.root()
+        # Save what we're doing
+        subs = tuple(sorted(self.__subscription_accumulator))
+        conn.root()[self.key] = (subs, self.generation)
+
+        for site_path, sub_kwargs in subs:
+            # The path argument must be absolute.
+            assert site_path.startswith(u'/')
+            # However, an absolute path wants to convert
+            # the context argument (connection.root()) into
+            # an ILocationInfo object so it can ask it what its root is.
+            # That can't be done, by default. We could either provide an adapter
+            # or a proxy, or we can just make the path non-absolute here, since
+            # we're starting from the database root.
+            site_path = site_path[1:]
+            sub_kwargs = dict(sub_kwargs)
+            site = ztapi.traverse(root, site_path)
+            site_manager = site.getSiteManager()
+            subscribe_in_site_manager(site_manager, **sub_kwargs)
+
+        # End by resetting the accumulated subscriptions. We should only be
+        # installed/evolved once per execution. This should only affect tests that
+        # don't tear down zope.component fully between runs.
+        self.__subscription_accumulator = []
 
     @property
     def generation(self):
@@ -83,12 +112,17 @@ class PersistentWebhookSchemaManager(object):
 
     def compareSubscriptionsAndComputeGeneration(self, stored_subscriptions, stored_generation):
         # re-sort, just in case sort order changed
-        stored_subscriptions = sorted(stored_subscriptions)
-        if stored_subscriptions == self.__subscription_accumulator:
+        stored_subscriptions = tuple(sorted(stored_subscriptions))
+        accum_subscriptions = tuple(sorted(self.__subscription_accumulator))
+        if stored_subscriptions == accum_subscriptions:
             self.__generation = stored_generation
         else:
             self.__generation = stored_generation + 1
-        print("Generation", self.__generation)
+
+
+def get_schema_manager():
+    return component.getUtility(IPersistentWebhookSchemaManager,
+                                name=PersistentWebhookSchemaManager.utility_name)
 
 @component.adapter(IDatabaseOpened)
 def update_schema_manager(event):
@@ -96,10 +130,9 @@ def update_schema_manager(event):
     # with an active transaction or explicit mode.
     txm = TransactionManager(explicit=True)
     txm.begin()
-    conn = event.database.open(txm)
-    subscriptions, generation = conn.root().get(PersistentWebhookSchemaManager.key, ([], 0))
-    txm.abort()
-    conn.close()
+    with contextlib.closing(event.database.open(txm)) as conn:
+        subscriptions, generation = conn.root().get(PersistentWebhookSchemaManager.key, ([], 0))
+        txm.abort()
 
-    schema = component.getUtility(IPersistentWebhookSchemaManager)
+    schema = get_schema_manager()
     schema.compareSubscriptionsAndComputeGeneration(subscriptions, generation)

@@ -29,7 +29,12 @@
     <!-- Traversing arbitrary objects, including many traversal adapters -->
     <include package="zope.traversing" />
 
-    <!-- Run our schema installer on IDatabaseOpenedWithRoote -->
+    <!-- Run our schema installer on IDatabaseOpenedWithRoot -->
+    <!--
+        Except, no, this file alone doesn't do that. You must manually include
+        the 'subscribers.zcml' file, or register a specific evolution
+        handler. The correct choice is up to the application.
+    -->
     <include package="zope.generations" />
 
     <!-- Basic externalization support -->
@@ -64,8 +69,10 @@
     <!-- The default dialect -->
     <utility factory=".dialect.DefaultWebhookDialect" />
 
-    <!-- Persistent subscriptions from ZCML -->
-    <utility factory=".generations.PersistentWebhookSchemaManager" />
+    <!-- Persistent subscriptions from ZCML. -->
+    <!-- Try to run at the end using a low-sorting name. -->
+    <utility factory=".generations.PersistentWebhookSchemaManager"
+             name="zzzz-nti.webhooks" />
     <subscriber handler=".generations.update_schema_manager" />
 
     <!-- Global event dispatchers are configured in subscribers.zcml -->

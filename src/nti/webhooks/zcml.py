@@ -145,8 +145,8 @@ def static_subscription(context, **kwargs):
     )
 
 def _persistent_subscription_action(site_path, subscription_kwargs):
-    from .generations import IPersistentWebhookSchemaManager
-    schema = component.getUtility(IPersistentWebhookSchemaManager)
+    from .generations import get_schema_manager
+    schema = get_schema_manager()
     schema.addSubscription(site_path, subscription_kwargs)
 
 def persistent_subscription(context, site_path=None, **kwargs):
