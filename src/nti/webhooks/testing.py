@@ -61,6 +61,7 @@ class DoctestTransaction(mock_db_trans):
     def finish(self):
         return self.__exit__(None, None, None)
 
+
 class ZODBFixture(object):
     """
     Like :class:`nti.testing.zodb.ZODBLayer`, but
@@ -72,14 +73,14 @@ class ZODBFixture(object):
         for c in reversed(ZODBLayer.__mro__):
             if 'setUp' in c.__dict__:
                 c.__dict__['setUp'].__func__(c)
-
+        cls.db = ZODBLayer.db
 
     @classmethod
     def tearDown(cls):
         for c in ZODBLayer.__mro__:
             if 'tearDown' in c.__dict__:
                 c.__dict__['tearDown'].__func__(c)
-
+        cls.db = None
 
 @interface.implementer(IExecutorService)
 class SequentialExecutorService(object):

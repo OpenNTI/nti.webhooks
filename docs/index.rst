@@ -3,14 +3,26 @@
  nti.webhooks
 ==============
 
-Contents:
+.. contents::
+   :local:
+
+.. include:: ../README.rst
+   :start-after: sphinx-include-begin-prelude
+   :end-before: sphinx-include-after-prelude
+
+.. note:: See the :doc:`glossary` for common terminology.
+
+Documentation
+=============
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
+   scope
    glossary
    configuration
    static
+   static-persistent
    security
    delivery_attempts
    subscription_security
@@ -21,10 +33,6 @@ Contents:
    changelog
 
 
-.. note:: See the :doc:`glossary` for common terminology.
-
-.. include:: ../README.rst
-   :start-after: sphinx-include-begin
 
 TODO
 ====

@@ -123,18 +123,16 @@ be opening and closing multiple transactions).
    >>> office = department['OUN'] = Office()
    >>> department_bob = department['employees']['Bob'] = Employee()
    >>> office_bob = office['employees']['Bob'] = Employee()
-   >>> print_tree(root_folder)
-        <ISite,IRootFolder>: <zope.site.folder.Folder object ...>
-            <ISite,IMainApplicationFolder>: NOAA ...
-                ++etc++hostsites ...
-                <ISite>: NWS ...
-                    <ISite>: OUN ...
-                        employees ...
-                            Bob ...
-                            ...
-                    employees ...
-                        Bob ...
-                            ...
+   >>> print_tree(root_folder, depth=0, details=())
+   <ISite,IRootFolder>: <zope.site.folder.Folder object...>
+        <ISite,IMainApplicationFolder>: NOAA
+            ++etc++hostsites
+            <ISite>: NWS
+                <ISite>: OUN
+                    employees
+                        Bob => <Employee Bob 1>
+                employees
+                    Bob => <Employee Bob 0>
    >>> office_bob_path = ztapi.getPath(office_bob)
    >>> print(office_bob_path)
    /NOAA/NWS/OUN/employees/Bob
@@ -175,10 +173,10 @@ back to the subscription, and its manager:
 
    >>> path = ztapi.getPath(subscription)
    >>> print(path)
-   /NOAA/NWS/OUN/++etc++site/WebhookSubscriptionManager/PersistentSubscription
+   /NOAA/NWS/OUN/++etc++site/default/WebhookSubscriptionManager/PersistentSubscription
    >>> ztapi.traverse(root_folder, path) is subscription
    True
-   >>> ztapi.traverse(root_folder, '/NOAA/NWS/OUN/++etc++site/WebhookSubscriptionManager')
+   >>> ztapi.traverse(root_folder, '/NOAA/NWS/OUN/++etc++site/default/WebhookSubscriptionManager')
    <....PersistentWebhookSubscriptionManager object at 0x...>
 
 The ``for`` Was Inferred

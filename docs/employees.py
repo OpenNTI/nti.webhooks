@@ -16,5 +16,20 @@ class Office(Employees):
     pass
 
 class Employee(Contained, Persistent):
+    COUNTER = 0
+
+    def __init__(self):
+        self.__counter__ = self.COUNTER
+        Employee.COUNTER += 1
+
     def toExternalObject(self, **kwargs):
         return self.__name__
+
+    def __repr__(self):
+        return "<Employee %s %d>" % (
+            self.__name__,
+            self.__counter__,
+        )
+
+from zope.testing import cleanup
+cleanup.addCleanUp(lambda: setattr(Employee, 'COUNTER', 0))

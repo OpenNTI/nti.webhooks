@@ -10,6 +10,8 @@ from __future__ import print_function
 from zope.interface import providedBy
 from zope.component import getSiteManager
 from zope.container.interfaces import IContainer
+from zope.traversing import api as ztapi
+from zope.location.interfaces import LocationError
 
 from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks.interfaces import IWebhookSubscriptionManager
@@ -51,18 +53,49 @@ def subscribe_to_resource(resource, to, for_=None,
             for_ = for_()
 
     site_manager = getSiteManager(resource)
-    sub_name = 'WebhookSubscriptionManager'
+    return subscribe_in_site_manager(site_manager,
+                                     dict(
+                                         to=to, for_=for_, when=when,
+                                         dialect_id=dialect_id,
+                                         owner_id=owner_id,
+                                         permission_id=permission_id))
+
+DEFAULT_UTILITY_NAME = 'WebhookSubscriptionManager'
+
+def subscribe_in_site_manager(site_manager, subscription_kwargs,
+                              utility_name=DEFAULT_UTILITY_NAME):
+    """
+    Produce and return a persistent ``IWebhookSubscription`` in the
+    given site manager.
+
+    The *subscription_kwargs* are as for
+    :meth:`nti.webhooks.interfaces.IWebhookSubscriptionManager.createSubscription`.
+    No defaults are applied here.
+
+    The *utility_name* can be used to namespace subscriptions.
+    It must never be empty.
+    """
     if IContainer.providedBy(site_manager):
-        sub_manager = site_manager.get(sub_name) # pylint:disable=no-member
+        # The preferred location for utilities is in the 'default'
+        # child: A SiteManagementFolder. But not every site manager
+        # is guaranteed to have one of those, sadly.
+        # The best way to get there, dealing with unicode, etc, is through
+        # traversal.
+        try:
+            parent = ztapi.traverse(site_manager, 'default')
+        except LocationError:
+            parent = site_manager
+        sub_manager = parent.get(utility_name) # pylint:disable=no-member
         if sub_manager is None:
-            sub_manager = site_manager[sub_name] = PersistentWebhookSubscriptionManager()
-            site_manager.registerUtility(sub_manager, IWebhookSubscriptionManager)
+            sub_manager = parent[utility_name] = PersistentWebhookSubscriptionManager()
+            site_manager.registerUtility(
+                sub_manager,
+                IWebhookSubscriptionManager,
+                name=utility_name if utility_name != DEFAULT_UTILITY_NAME else ''
+            )
     else:
         # Perhaps we should fail?
         sub_manager = site_manager.getUtility(IWebhookSubscriptionManager)
 
-    subscription = sub_manager.createSubscription(to=to, for_=for_, when=when,
-                                                  dialect_id=dialect_id,
-                                                  owner_id=owner_id,
-                                                  permission_id=permission_id)
+    subscription = sub_manager.createSubscription(**subscription_kwargs)
     return subscription

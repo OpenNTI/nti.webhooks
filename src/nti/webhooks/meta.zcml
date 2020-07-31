@@ -10,6 +10,12 @@
             schema="nti.webhooks.zcml.IStaticSubscriptionDirective"
             handler="nti.webhooks.zcml.static_subscription"
             />
+        <meta:directive
+            name="persistentSubscription"
+            schema="nti.webhooks.zcml.IStaticPersistentSubscriptionDirective"
+            handler="nti.webhooks.zcml.persistent_subscription"
+            />
+
     </meta:directives>
 
 </configure>
