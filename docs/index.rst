@@ -49,20 +49,8 @@ TODO
 Dynamic-subscriptions only
 --------------------------
 
-.. todo::  Add ZCML directive equivalent of API function that registers
-           a persistent subscription manager. Since it's not a great
-           idea to look for IDatabase and open transactions at
-           zope.configuration time, this will take some work. Ideas:
-           Use some sort of global proxy object that, when applicable,
-           tries to do the same thing as the API function. Or, listen
-           for IDatabaseOpenedWithRoot message, accept a path to a
-           ISite in the directive.
-
 .. todo::  Removing subscriptions when principals are removed.
-.. todo::  Add dynamic subscription at higher level and find it too (we already
-           have an example with static subscriptions). Maybe triggering on a
-           different event type would be good too.
-.. todo::  Add test to add new subscription when manager already exists.
+
 .. todo::  API for deleting subscriptions. Probably done by finding
            all subscriptions for a resource/principal.
 .. todo::  Auto-deactivate subscriptions after: applicability failures
