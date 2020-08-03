@@ -75,7 +75,9 @@ setup(
         'zope.site',
         'nti.site >= 2.2.0',
         'nti.zodb',
-        'nti.externalization >= 2.0.0', # Consistent interface resolution order
+        # Consistent interface resolution order in 2.0;
+        # externalization policies in 2.1.
+        'nti.externalization >= 2.1.0',
         'nti.schema',
         'setuptools',
         'transaction',

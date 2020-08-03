@@ -38,9 +38,6 @@ TODO
 ====
 
 .. todo:: Externalization for the objects defined here.
-          Note that we will need to be able to support the
-          created/modified time properties as ISO format strings, not
-          numbers for zapier. (This goes for all objects.)
 .. todo:: Write events document. Add specific events for subscription
           in/activated.
 .. todo:: Implement IDCTimes in terms of the native object

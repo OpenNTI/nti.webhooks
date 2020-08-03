@@ -60,7 +60,7 @@ First define the classes. These are stored in a module named ``employees``.
 
 .. doctest::
 
-   >>> from employees import Department, Office, Employee
+   >>> from employees import Department, Office, ExternalizableEmployee as Employee
 
 
 Now we'll create a database and store our hierarchy.
@@ -154,7 +154,7 @@ frequently one we've traversed to.
    >>> office_bob = ztapi.traverse(conn.root()['Application'], office_bob_path)
    >>> subscription = subscribe_to_resource(office_bob, 'https://example.com/some/path')
    >>> subscription
-   <...PersistentSubscription at 0x... to='https://example.com/some/path' for=employees.Employee when=IObjectEvent>
+   <...PersistentSubscription at 0x... to='https://example.com/some/path' for=employees.ExternalizableEmployee when=IObjectEvent>
 
 What Just Happened
 ------------------
@@ -189,13 +189,13 @@ case the same thing that ``office_bob`` provides:
 
    >>> from zope.interface import providedBy
    >>> subscription.for_
-   <implementedBy employees.Employee>
+   <implementedBy employees.ExternalizableEmployee>
    >>> subscription.for_.__name__
-   'employees.Employee'
+   'employees.ExternalizableEmployee'
    >>> providedBy(office_bob)
-   <implementedBy employees.Employee>
+   <implementedBy employees.ExternalizableEmployee>
    >>> providedBy(office_bob).inherit
-   <class 'employees.Employee'>
+   <class 'employees.ExternalizableEmployee'>
 
 This is a complex value; because of how pickling works, it will stay
 in sync with exactly what that class actually provides.

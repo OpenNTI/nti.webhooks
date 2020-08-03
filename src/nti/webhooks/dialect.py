@@ -14,6 +14,7 @@ from zope import component
 from requests import Request
 
 from nti import externalization
+from nti.externalization.interfaces import IExternalObjectRepresenter
 from nti.webhooks.interfaces import IWebhookDialect
 from nti.webhooks.interfaces import IWebhookPayload
 
@@ -32,6 +33,11 @@ class DefaultWebhookDialect(object):
     #: external form. This is also the highest-priority name
     #: of the adapter used.
     externalizer_name = u'webhook-delivery'
+
+    #: The name of the externalization policy utility
+    #: used to produce the external form. This defaults to one
+    #: that uses ISO8601 format for Unix timestamps.
+    externalizer_policy_name = u'webhook-delivery'
 
     #: Which representation to use. Passed to
     #: :func:`nti.externaliaztion.to_external_representation`
@@ -91,11 +97,25 @@ class DefaultWebhookDialect(object):
     def externalizeData(self, data, event):
         "See :meth:`nti.webhooks.interfaces.IWebhookDialect.externalizeData`"
         payload = self.produce_payload(data, event)
-        ext_data = externalization.to_external_representation(
+        # ext_data = externalization.to_external_representation(
+        #     payload,
+        #     ext_format=self.externalizer_format,
+        #     name=self.externalizer_name)
+        # ``to_external_representation`` doesn't accept the policy or policy_name
+        # argument in nti.externalization 2.0
+        policy_name = self.externalizer_policy_name
+        if policy_name is None:
+            # We do this here to keep clients from knowing the
+            # ugly details.
+            from nti.externalization._base_interfaces import NotGiven
+            policy_name = NotGiven
+        ext = externalization.to_external_object(
             payload,
-            ext_format=self.externalizer_format,
-            name=self.externalizer_name)
-        return ext_data
+            name=self.externalizer_name,
+            policy_name=policy_name)
+        rep = component.getUtility(IExternalObjectRepresenter,
+                                   name=self.externalizer_format)
+        return rep.dump(ext)
 
     def produce_headers(self, http_session, subscription, attempt):
         headers = {
