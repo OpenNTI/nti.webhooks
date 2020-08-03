@@ -19,15 +19,19 @@ customize that process. It will use :doc:`static subscriptions
 <static>` to demonstrate, but these techniques are equally relevant
 for :doc:`dynamic subscriptions <dynamic>`.
 
-Let's begin by registering our example static subscription, and
+Let's begin by registering an example static subscription, and
 refresh our memory of what the HTTP request looks like by default.
-First, the imports and creation of the static subscription.
+First, the imports and creation of the static subscription; we'll use
+the objects defined in ``employees.py``:
+
+.. literalinclude:: employees.py
 
 .. doctest::
 
    >>> import transaction
    >>> from zope import lifecycleevent, component
    >>> from zope.container.folder import Folder
+   >>> from employees import Employee
    >>> from zope.configuration import xmlconfig
    >>> from nti.webhooks.interfaces import IWebhookSubscriptionManager
    >>> from nti.webhooks.interfaces import IWebhookDeliveryManager
@@ -42,7 +46,7 @@ First, the imports and creation of the static subscription.
    ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
    ...   <webhooks:staticSubscription
    ...             to="https://example.com/some/path"
-   ...             for="zope.container.interfaces.IContentContainer"
+   ...             for="employees.Employee"
    ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent" />
    ... </configure>
    ... """)
@@ -51,11 +55,12 @@ Next, we :term:`trigger` the subscription and wait for it to be delivered.
 
 .. doctest::
 
-   >>> def trigger_delivery(factory=Folder, contents=()):
+   >>> def trigger_delivery(factory=Employee, name=u'Bob', last_modified=None):
    ...    _ = transaction.begin()
-   ...    folder = factory()
-   ...    for k, v in contents: folder[k] = v
-   ...    lifecycleevent.created(folder)
+   ...    employee = factory()
+   ...    employee.__name__ = name
+   ...    if last_modified: employee.LastModified = last_modified
+   ...    lifecycleevent.created(employee)
    ...    transaction.commit()
    ...    component.getUtility(IWebhookDeliveryManager).waitForPendingDeliveries()
    >>> trigger_delivery()
@@ -78,11 +83,11 @@ Finally, we can look at what we actually sent. It's not too pretty.
    {'Accept': '*/*',
     'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
-    'Content-Length': '94',
+    'Content-Length': '84',
     'Content-Type': 'application/json',
     'User-Agent': 'nti.webhooks...'}
    >>> print(attempt.request.body)
-   {"Class": "NonExternalizableObject", "InternalType": "<class 'zope.container.folder.Folder'>"}
+   {"Class": "NonExternalizableObject", "InternalType": "<class 'employees.Employee'>"}
 
 
 Customizing The Body
@@ -125,9 +130,9 @@ First, an adapter for a single object with no name.
    >>> from zope.component import adapter
    >>> from nti.webhooks.interfaces import IWebhookPayload
    >>> @implementer(IWebhookPayload)
-   ... @adapter(Folder)
-   ... def single_adapter(folder):
-   ...    return len(folder)
+   ... @adapter(Employee)
+   ... def single_adapter(employee):
+   ...    return employee.__name__
    >>> component.provideAdapter(single_adapter)
 
 Triggering the event now produces a different body.
@@ -137,11 +142,11 @@ Triggering the event now produces a different body.
    >>> trigger_delivery()
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
-   0
-   >>> trigger_delivery(contents=[('k', 'v')])
+   "Bob"
+   >>> trigger_delivery(name=u'Susan')
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
-   1
+   "Susan"
 
 Higher priority is a named adapter.
 
@@ -149,15 +154,15 @@ Higher priority is a named adapter.
 
    >>> from zope.component import named
    >>> @implementer(IWebhookPayload)
-   ... @adapter(Folder)
+   ... @adapter(Employee)
    ... @named("webhook-delivery")
    ... def named_single_adapter(folder):
-   ...     return "A folder"
+   ...     return "An Employee"
    >>> component.provideAdapter(named_single_adapter)
    >>> trigger_delivery()
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
-   "A folder"
+   "An Employee"
 
 Of course, if the object already provides ``IWebhookPayload``,
 then it is returned directly without using those adapters.
@@ -165,8 +170,8 @@ then it is returned directly without using those adapters.
 .. doctest::
 
    >>> @implementer(IWebhookPayload)
-   ... class PayloadFactory(Folder):
-   ...    """A folder that is its own payload."""
+   ... class PayloadFactory(Employee):
+   ...    """An employee that is its own payload."""
    >>> trigger_delivery(factory=PayloadFactory)
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
@@ -185,14 +190,14 @@ adapter or the object itself.
 
    >>> from zope.lifecycleevent.interfaces import IObjectCreatedEvent
    >>> @implementer(IWebhookPayload)
-   ... @adapter(Folder, IObjectCreatedEvent)
-   ... def multi_adapter(folder, event):
-   ...    return "folder-and-event"
+   ... @adapter(Employee, IObjectCreatedEvent)
+   ... def multi_adapter(employee, event):
+   ...    return "employee-and-event"
    >>> component.provideAdapter(multi_adapter)
    >>> trigger_delivery()
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
-   "folder-and-event"
+   "employee-and-event"
 
 Finally, the highest priority is a named multi-adapter.
 
@@ -200,15 +205,15 @@ Finally, the highest priority is a named multi-adapter.
 
    >>> from zope.lifecycleevent.interfaces import IObjectCreatedEvent
    >>> @implementer(IWebhookPayload)
-   ... @adapter(Folder, IObjectCreatedEvent)
+   ... @adapter(Employee, IObjectCreatedEvent)
    ... @named("webhook-delivery")
-   ... def named_multi_adapter(folder, event):
-   ...    return "named-folder-and-event"
+   ... def named_multi_adapter(employee, event):
+   ...    return "named-employee-and-event"
    >>> component.provideAdapter(named_multi_adapter)
    >>> trigger_delivery()
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
-   "named-folder-and-event"
+   "named-employee-and-event"
 
 
 Cleanup
@@ -260,15 +265,19 @@ first defining and registering a
 .. doctest::
 
    >>> from nti.externalization.interfaces import IInternalObjectExternalizer
+   >>> from nti.externalization import to_standard_external_dictionary
    >>> @implementer(IInternalObjectExternalizer)
-   ... @adapter(Folder)
+   ... @adapter(Employee)
    ... @named('webhook-testing')
-   ... class FolderExternalizer(object):
+   ... class EmployeeExternalizer(object):
    ...     def __init__(self, context):
    ...         self.context = context
    ...     def toExternalObject(self, **kwargs):
-   ...         return {'Class': 'Folder', 'Length': len(self.context)}
-   >>> component.provideAdapter(FolderExternalizer)
+   ...         std = to_standard_external_dictionary(self.context, **kwargs)
+   ...         std['Class'] = 'Employee'
+   ...         std['Name'] = self.context.__name__
+   ...         return std
+   >>> component.provideAdapter(EmployeeExternalizer)
 
 Next, we'll create a dialect that uses this externalizer, and register it:
 
@@ -293,7 +302,37 @@ Now when we trigger the subscription, we use this externalizer:
    >>> trigger_delivery()
    >>> attempt = subscription.pop()
    >>> print(attempt.request.body)
-   {"Class": "Folder", "Length": 0}
+   {"Class": "Employee", "Name": "Bob"}
+
+
+.. rubric:: Customizing the Body With Externalization Policies
+
+Making smaller tweaks can be accomplished by adjusting the
+externalization policy that's used. By default, the externalization
+policy, named in
+:attr:`~.DefaultWebhookDialect.externalizer_policy_name`, produces
+ISO8601 strings for values stored as Unix timestamps (seconds since
+the epoch).
+
+.. doctest::
+
+   >>> trigger_delivery(last_modified=123456789.0)
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.body)
+   {"Class": "Employee", "Last Modified": "1973-11-29T21:33:09Z", "Name": "Bob"}
+
+The best way to adjust this is to set the ``externalizer_policy_name``
+to a different value. A unicode string should refere to a registered
+externalization policy component. If we set it to ``None``, the
+default policy (which outputs the timestamps as numbers) is used.
+
+.. doctest::
+
+   >>> TestDialect.externalizer_policy_name = None
+   >>> trigger_delivery(last_modified=123456789.0)
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.body)
+   {"Class": "Employee", "Last Modified": 123456789.0, "Name": "Bob"}
 
 
 Setting Headers
@@ -312,7 +351,7 @@ default values for these things:
    {'Accept': '*/*',
     'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
-    'Content-Length': '32',
+    'Content-Length': '66',
     'Content-Type': 'application/json',
     'User-Agent': 'nti.webhooks ...'}
 
@@ -335,7 +374,7 @@ Lets apply some simple customizations and send again.
    {'Accept': '*/*',
     'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
-    'Content-Length': '32',
+    'Content-Length': '36',
     'Content-Type': 'application/json',
     'User-Agent': 'doctests'}
 

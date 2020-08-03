@@ -68,6 +68,9 @@
 
     <!-- The default dialect -->
     <utility factory=".dialect.DefaultWebhookDialect" />
+    <utility component=".externalization.ISODateExternalizationPolicy"
+             name="webhook-delivery"
+             />
 
     <!-- Persistent subscriptions from ZCML. -->
     <!-- Try to run at the end using a low-sorting name. -->
