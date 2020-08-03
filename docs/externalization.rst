@@ -95,9 +95,34 @@ Externalizing the subscription now produces some useful data.
 To make it easier to digest, we'll look at the component objects one
 at a time. First, we'll look at the subscription.
 
+.. Sigh.Some unicode key name fixup for Python 2.
+
+.. doctest::
+   :hide:
+
+   >>> def fixup(d):
+   ...    for k in (u'Class', u'CreatedTime', u'Last Modified'):
+   ...       if k in d:
+   ...         v = d.pop(k)
+   ...         d[str(k)] = v
+   ...    bad_type = unicode if str is bytes else bytes
+   ...    for k, v in d.items():
+   ...        if isinstance(v, bad_type):
+   ...          d[k] = v = str(v)
+   ...        if isinstance(k, bad_type):
+   ...          del d[k]
+   ...          d[str(k)] = v
+   >>> fixup(ext_subscription)
+   >>> for d in ext_subscription['Contents']:
+   ...    fixup(d)
+   ...    fixup(d['request'])
+   ...    fixup(d['response'])
+   ...    fixup(d['request']['headers'])
+   ...    fixup(d['response']['headers'])
+
+
 .. Note the four character indent in the bodies to facilitate
    copying from failed output.
-
 
 .. doctest::
 
