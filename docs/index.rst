@@ -29,6 +29,7 @@ Documentation
    customizing_payloads
    dynamic
    events
+   externalization
    api/index
    changelog
 
@@ -37,7 +38,6 @@ Documentation
 TODO
 ====
 
-.. todo:: Externalization for the objects defined here.
 .. todo:: Write events document. Add specific events for subscription
           in/activated.
 .. todo:: Implement IDCTimes in terms of the native object

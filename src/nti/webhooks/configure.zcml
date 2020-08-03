@@ -92,4 +92,22 @@
     <subscriber handler=".subscribers.apply_security_to_subscription"
                 trusted="true" />
 
+    <!-- Externalization -->
+    <adapter factory=".externalization.SubscriptionExternalizer"
+             for=".interfaces.IWebhookSubscription"
+             provides="nti.externalization.interfaces.IInternalObjectExternalizer"
+             />
+    <adapter factory=".externalization.DeliveryAttemptExternalizer"
+             for=".interfaces.IWebhookDeliveryAttempt"
+             provides="nti.externalization.interfaces.IInternalObjectExternalizer"
+             />
+    <adapter factory=".externalization.DeliveryAttemptRequestExternalizer"
+             for=".interfaces.IWebhookDeliveryAttemptRequest"
+             provides="nti.externalization.interfaces.IInternalObjectExternalizer"
+             />
+    <adapter factory=".externalization.DeliveryAttemptResponseExternalizer"
+             for=".interfaces.IWebhookDeliveryAttemptResponse"
+             provides="nti.externalization.interfaces.IInternalObjectExternalizer"
+             />
+
 </configure>
