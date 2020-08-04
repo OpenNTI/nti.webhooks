@@ -26,6 +26,8 @@
     <!-- Annotations, used for security. -->
     <include package="zope.annotation" />
 
+    <!-- Do NOT include zope.dublincore. -->
+
     <!-- Traversing arbitrary objects, including many traversal adapters -->
     <include package="zope.traversing" />
 
@@ -109,5 +111,39 @@
              for=".interfaces.IWebhookDeliveryAttemptResponse"
              provides="nti.externalization.interfaces.IInternalObjectExternalizer"
              />
+
+    <!-- Specialized ZopeDublinCore -->
+    <adapter factory="._util.PartialZopeDublinCoreAdapter"
+             for=".interfaces._ITimes"
+             provides="zope.dublincore.interfaces.IWriteZopeDublinCore"
+             />
+
+    <class class=".subscriptions.Subscription">
+        <implements
+            interface="zope.annotation.interfaces.IAttributeAnnotatable"
+            />
+    </class>
+
+    <class class=".subscriptions.PersistentWebhookSubscriptionManager">
+        <implements
+            interface="zope.annotation.interfaces.IAttributeAnnotatable"
+            />
+    </class>
+
+    <class class=".attempts.WebhookDeliveryAttemptRequest">
+        <implements
+            interface="zope.annotation.interfaces.IAttributeAnnotatable"
+            />
+    </class>
+    <class class=".attempts.WebhookDeliveryAttemptResponse">
+        <implements
+            interface="zope.annotation.interfaces.IAttributeAnnotatable"
+            />
+    </class>
+    <class class=".attempts.WebhookDeliveryAttempt">
+        <implements
+            interface="zope.annotation.interfaces.IAttributeAnnotatable"
+            />
+    </class>
 
 </configure>

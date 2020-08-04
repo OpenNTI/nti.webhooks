@@ -63,6 +63,8 @@ from nti.webhooks.interfaces import WebhookSubscriptionApplicabilityPrecondition
 from nti.webhooks.attempts import WebhookDeliveryAttempt
 from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
 
+from nti.webhooks._util import DCTimesMixin
+
 from persistent import Persistent
 
 logger = __import__('logging').getLogger(__name__)
@@ -98,7 +100,7 @@ class IApplicableSubscriptionFactory(Interface): # pylint:disable=inherit-non-cl
              ILimitedApplicabilityPreconditionFailureWebhookSubscription,
              IAttributeAnnotatable,
              IApplicableSubscriptionFactory)
-class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
+class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer, DCTimesMixin):
     """
     Default, non-persistent implementation of `IWebhookSubscription`.
     """
@@ -115,6 +117,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     fallback_to_unauthenticated_principal = True
 
     def __init__(self, **kwargs):
+        self.createdTime = self.lastModified = time.time()
         SchemaConfigured.__init__(self, **kwargs)
         _CheckObjectOnSetBTreeContainer.__init__(self)
 
@@ -424,11 +427,12 @@ def deactivate_subscription_when_applicable_limit_exceeded(subscription, event):
 
 
 @implementer(IWebhookSubscriptionManager)
-class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
+class PersistentWebhookSubscriptionManager(DCTimesMixin, _CheckObjectOnSetBTreeContainer):
 
     def __init__(self):
         super(PersistentWebhookSubscriptionManager, self).__init__()
         self.registry = self._make_registry()
+        self.createdTime = self.lastModified = time.time()
 
     def _make_registry(self):
         return PersistentComponents()

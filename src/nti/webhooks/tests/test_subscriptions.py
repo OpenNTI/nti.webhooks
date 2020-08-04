@@ -19,7 +19,18 @@ from zope import component
 
 from nti.webhooks import subscriptions
 
-class TestGlobalWebhookSubscriptionManager(unittest.TestCase):
+from nti.webhooks.tests import DCTimesMixin
+
+class TestPersistentSubscriptionManager(DCTimesMixin,
+                                        unittest.TestCase):
+
+    def _makeOne(self):
+        return subscriptions.PersistentWebhookSubscriptionManager()
+
+class TestGlobalWebhookSubscriptionManager(TestPersistentSubscriptionManager):
+
+    def _makeOne(self):
+        return subscriptions.global_subscription_manager
 
     def test_pickle(self):
         import pickle
@@ -41,3 +52,15 @@ class TestGlobalWebhookSubscriptionManager(unittest.TestCase):
                         adapters=is_not(same_instance(site_man.adapters)),
                         utilities=is_not(same_instance(site_man.utilities))
                     ))
+
+
+class TestSubscription(DCTimesMixin, unittest.TestCase):
+
+    def _makeOne(self):
+        return subscriptions.Subscription()
+
+
+class TestPersistentSubscription(TestSubscription):
+
+    def _makeOne(self):
+        return subscriptions.PersistentSubscription()

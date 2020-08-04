@@ -27,6 +27,7 @@ from nti.schema.schema import SchemaConfigured
 
 from nti.webhooks._util import print_exception_to_text
 from nti.webhooks._util import text_type
+from nti.webhooks._util import DCTimesMixin
 
 from nti.webhooks.interfaces import IWebhookDeliveryAttempt
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptRequest
@@ -66,12 +67,12 @@ DeliveryOriginationInfo = namedtuple(
 # The origination info itself is also immutable, though the exception
 # history may change.
 @implementer(IWebhookDeliveryAttemptInternalInfo)
-class WebhookDeliveryAttemptInternalInfo(Contained):
+class WebhookDeliveryAttemptInternalInfo(DCTimesMixin, Contained):
 
     exception_history = ()
 
     def __init__(self):
-        now = self.createdTime = time.time()
+        now = self.createdTime = self.lastModified = time.time()
         pid = os.getpid()
         hostname = socket.gethostname()
         transaction_note = transaction.get().description
@@ -105,7 +106,7 @@ class WebhookDeliveryAttemptInternalInfo(Contained):
 # persistent.
 ###
 
-class _Base(SchemaConfigured):
+class _Base(DCTimesMixin, SchemaConfigured):
 
     def __init__(self, **kwargs):
         self.createdTime = self.lastModified = time.time()
@@ -114,12 +115,14 @@ class _Base(SchemaConfigured):
 @implementer(IWebhookDeliveryAttemptRequest)
 class WebhookDeliveryAttemptRequest(_Base):
     __name__ = 'request'
-    createFieldProperties(IWebhookDeliveryAttemptRequest)
+    createFieldProperties(IWebhookDeliveryAttemptRequest,
+                          omit=('created', 'modified'))
 
 @implementer(IWebhookDeliveryAttemptResponse)
 class WebhookDeliveryAttemptResponse(_Base):
     __name__ = 'response'
-    createFieldProperties(IWebhookDeliveryAttemptResponse)
+    createFieldProperties(IWebhookDeliveryAttemptResponse,
+                          omit=('created', 'modified'))
 
 class _StatusDescriptor(object):
     """
@@ -157,7 +160,8 @@ class _StatusDescriptor(object):
 class WebhookDeliveryAttempt(_Base, Contained):
     status = None
     internal_info = None
-    createFieldProperties(IWebhookDeliveryAttempt)
+    createFieldProperties(IWebhookDeliveryAttempt,
+                          omit=('created', 'modified'))
     # Allow delayed validation for these things.
     request = None
     response = None

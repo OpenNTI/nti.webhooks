@@ -36,7 +36,9 @@ class SubscriptionExternalizer(InterfaceObjectIO):
         'dialect',
         # for_ and when are arbitrary classes or interface
         # specifications. They're not meaningful to end users by themselves.
-        'for_', 'when'
+        'for_', 'when',
+        # Redundant IDCTimes data
+        'created', 'modified',
     }) | InterfaceObjectIO._excluded_out_ivars_
 
     def toExternalObject(self, *args, **kwargs): # pylint:disable=signature-differs
@@ -55,11 +57,23 @@ class DeliveryAttemptExternalizer(InterfaceObjectIO):
     _excluded_out_ivars_ = frozenset({
         # This is...internal. Duh.
         'internal_info',
+        # Redundant IDCTimes data
+        'created', 'modified',
     }) | InterfaceObjectIO._excluded_out_ivars_
 
 
 class DeliveryAttemptRequestExternalizer(InterfaceObjectIO):
     _ext_iface_upper_bound = IWebhookDeliveryAttemptRequest
 
+    _excluded_out_ivars_ = frozenset({
+        # Redundant IDCTimes data
+        'created', 'modified',
+    }) | InterfaceObjectIO._excluded_out_ivars_
+
 class DeliveryAttemptResponseExternalizer(InterfaceObjectIO):
     _ext_iface_upper_bound = IWebhookDeliveryAttemptResponse
+
+    _excluded_out_ivars_ = frozenset({
+        # Redundant IDCTimes data
+        'created', 'modified',
+    }) | InterfaceObjectIO._excluded_out_ivars_
