@@ -29,6 +29,9 @@ class DefaultWebhookDialect(object):
     in adding additional methods to the interface.
     """
 
+    # REMEMBER: Keep the ZCML directive in sync with
+    # this as much as possible.
+
     #: The name of the externalizer used to produce the
     #: external form. This is also the highest-priority name
     #: of the adapter used.

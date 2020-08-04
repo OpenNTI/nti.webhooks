@@ -42,9 +42,7 @@ TODO
           in/activated.
 .. todo:: The concept of an active, in-process, retry policy.
 .. todo:: An API to retry a failed request.
-.. todo:: Add a dialect that uses a 'summary' externalizer. OR:
-          Add a ZCML directive or argument that creates a dialect and
-          specifies some common option names.
+
 
 Dynamic-subscriptions only
 --------------------------

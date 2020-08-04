@@ -10,4 +10,5 @@
    delivery
    subscriptions
    subscribers
+   zcml
    testing

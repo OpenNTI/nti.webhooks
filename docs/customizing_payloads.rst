@@ -2,6 +2,8 @@
  Customizing HTTP Requests
 ===========================
 
+.. currentmodule:: nti.webhooks.dialect
+
 .. testsetup::
 
    from zope.testing import cleanup
@@ -248,9 +250,13 @@ implemented by this class in its
 
 .. important::
 
-   Dialects should not be persistent objects. They may be used outside
+   Dialects must not be persistent objects. They may be used outside
    of contexts where ZODB is available.
 
+.. note::
+
+   Much of what is done next with custom code can also be done with
+   ZCML. See :ref:`zcmldialect` for details.
 
 Setting the Body
 ----------------
@@ -260,7 +266,7 @@ default dialect uses an externalizer with the name given in
 :attr:`~.DefaultWebhookDialect.externalizer_name`; a subclass can
 change this by setting it on the class object. We'll demonstrate by
 first defining and registering a
-:class:`nti.externalization.interfaces.IInternalObjectExternalizer` with a custom name.
+:mod:`IInternalObjectExternalizer <nti.externalization.interfaces>` with a custom name.
 
 .. doctest::
 
@@ -378,6 +384,59 @@ Lets apply some simple customizations and send again.
     'Content-Type': 'application/json',
     'User-Agent': 'doctests'}
 
+.. _zcmldialect:
+
+Defining A Dialect Using ZCML
+-----------------------------
+
+For the simple cases that are customizations of the strings defined by
+the `DefaultWebhookDialect`, you can use a ZCML directive to define them.
+
+.. autointerface:: nti.webhooks.zcml.IDialectDirective
+   :noindex:
+
+We can repeat the above example using just ZCML.
+
+.. doctest::
+
+   >>> from nti.webhooks.subscriptions import resetGlobals
+   >>> resetGlobals()
+   >>> conf_context = xmlconfig.string("""
+   ... <configure
+   ...     xmlns="http://namespaces.zope.org/zope"
+   ...     xmlns:webhooks="http://nextthought.com/ntp/webhooks"
+   ...     >
+   ...   <include package="zope.component" />
+   ...   <include package="zope.container" />
+   ...   <include package="nti.webhooks" />
+   ...   <include package="nti.webhooks" file="subscribers_promiscuous.zcml" />
+   ...   <webhooks:webhookDialect
+   ...             name='zcml-dialect'
+   ...             externalizer_name='webhook-testing'
+   ...             externalizer_policy_name=''
+   ...             http_method='PUT'
+   ...             user_agent='zcml-tests' />
+   ...   <webhooks:staticSubscription
+   ...             dialect='zcml-dialect'
+   ...             to="https://example.com/some/path"
+   ...             for="employees.Employee"
+   ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent" />
+   ... </configure>
+   ... """)
+   >>> subscription = sub_manager['Subscription']
+   >>> trigger_delivery(last_modified=123456789.0)
+   >>> attempt = subscription.pop()
+   >>> print(attempt.request.body)
+   {"Class": "Employee", "Last Modified": 123456789.0, "Name": "Bob"}
+   >>> print(attempt.request.method)
+   PUT
+   >>> pprint.pprint({str(k): str(v) for k, v in attempt.request.headers.items()})
+   {'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Content-Length': '66',
+    'Content-Type': 'application/json',
+    'User-Agent': 'zcml-tests'}
 
 
 .. testcleanup::
