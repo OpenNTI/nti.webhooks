@@ -27,6 +27,8 @@ from nti.schema.schema import SchemaConfigured
 
 from nti.webhooks._util import print_exception_to_text
 from nti.webhooks._util import text_type
+from nti.webhooks._util import DCTimesMixin
+from nti.webhooks._util import PersistentDCTimesMixin
 
 from nti.webhooks.interfaces import IWebhookDeliveryAttempt
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptRequest
@@ -66,12 +68,12 @@ DeliveryOriginationInfo = namedtuple(
 # The origination info itself is also immutable, though the exception
 # history may change.
 @implementer(IWebhookDeliveryAttemptInternalInfo)
-class WebhookDeliveryAttemptInternalInfo(Contained):
+class WebhookDeliveryAttemptInternalInfo(DCTimesMixin, Contained):
 
     exception_history = ()
 
     def __init__(self):
-        now = self.createdTime = time.time()
+        now = self.createdTime = self.lastModified = time.time()
         pid = os.getpid()
         hostname = socket.gethostname()
         transaction_note = transaction.get().description
@@ -105,7 +107,7 @@ class WebhookDeliveryAttemptInternalInfo(Contained):
 # persistent.
 ###
 
-class _Base(SchemaConfigured):
+class _Base(DCTimesMixin, SchemaConfigured):
 
     def __init__(self, **kwargs):
         self.createdTime = self.lastModified = time.time()
@@ -114,12 +116,14 @@ class _Base(SchemaConfigured):
 @implementer(IWebhookDeliveryAttemptRequest)
 class WebhookDeliveryAttemptRequest(_Base):
     __name__ = 'request'
-    createFieldProperties(IWebhookDeliveryAttemptRequest)
+    createFieldProperties(IWebhookDeliveryAttemptRequest,
+                          omit=('created', 'modified'))
 
 @implementer(IWebhookDeliveryAttemptResponse)
 class WebhookDeliveryAttemptResponse(_Base):
     __name__ = 'response'
-    createFieldProperties(IWebhookDeliveryAttemptResponse)
+    createFieldProperties(IWebhookDeliveryAttemptResponse,
+                          omit=('created', 'modified'))
 
 class _StatusDescriptor(object):
     """
@@ -142,6 +146,7 @@ class _StatusDescriptor(object):
         if inst.resolved():
             raise AttributeError("Cannot change status once set.")
         self._fp.__set__(inst, value) # This fires IFieldUpdatedEvent
+        inst.lastModified = time.time()
         # Now fire our more specific event, if we've settled
         if not status_field.isResolved(value):
             return
@@ -157,7 +162,8 @@ class _StatusDescriptor(object):
 class WebhookDeliveryAttempt(_Base, Contained):
     status = None
     internal_info = None
-    createFieldProperties(IWebhookDeliveryAttempt)
+    createFieldProperties(IWebhookDeliveryAttempt,
+                          omit=('created', 'modified', 'lastModified'))
     # Allow delayed validation for these things.
     request = None
     response = None
@@ -175,10 +181,12 @@ class WebhookDeliveryAttempt(_Base, Contained):
         self.internal_info.__name__ = 'internal_info'
 
     def __repr__(self):
-        return "<%s.%s at 0x%x status=%r>" % (
+        return "<%s.%s at 0x%x created=%s modified=%s status=%r>" % (
             self.__class__.__module__,
             self.__class__.__name__,
             id(self),
+            self.created,
+            self.modified,
             self.status,
         )
 
@@ -197,6 +205,7 @@ class WebhookDeliveryAttempt(_Base, Contained):
         return IWebhookDeliveryAttempt['status'].isResolved(self.status)
 
 
-class PersistentWebhookDeliveryAttempt(WebhookDeliveryAttempt, Persistent):
-    # XXX: _p_repr
-    pass
+class PersistentWebhookDeliveryAttempt(WebhookDeliveryAttempt, PersistentDCTimesMixin):
+
+    _p_repr = WebhookDeliveryAttempt.__repr__
+    __repr__ = Persistent.__repr__

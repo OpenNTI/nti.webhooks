@@ -22,7 +22,7 @@ from zope.container.constraints import contains
 from zope.container.constraints import containers
 
 from zope.componentvocabulary.vocabulary import UtilityNames
-
+from zope.dublincore.interfaces import IDCTimes
 from zope.lifecycleevent.interfaces import IObjectModifiedEvent
 
 from zope.principalregistry.metadirectives import TextId
@@ -42,6 +42,7 @@ from nti.schema.field import Bool
 from nti.webhooks._schema import HTTPSURL
 
 # pylint:disable=inherit-non-class,no-self-argument,no-method-argument,
+# pylint:disable=too-many-ancestors
 
 # TODO: Add an __all__ when this is closer to finished.
 
@@ -67,8 +68,14 @@ except ImportError:
         lastModified = Number(
             title=u"The timestamp at which this object or its contents was last modified.",
             default=0.0)
-else:
+else: # pragma: no cover
     from nti.base.interfaces import ILastModified
+
+
+class _ITimes(ILastModified, IDCTimes):
+    """
+    Internal unifying interface for time metadata.
+    """
 
 
 class IWebhookDeliveryManager(Interface):
@@ -219,7 +226,7 @@ class IWebhookDialect(Interface):
            It may not be possible to access attributes of persistent objects
         """
 
-class IWebhookDeliveryAttemptRequest(ICreatedTime):
+class IWebhookDeliveryAttemptRequest(_ITimes):
     """
     The details about an HTTP request sent to a webhook.
     """
@@ -268,7 +275,7 @@ class IWebhookDeliveryAttemptRequest(ICreatedTime):
     )
 
 
-class IWebhookDeliveryAttemptResponse(ICreatedTime):
+class IWebhookDeliveryAttemptResponse(_ITimes):
     """
     The details about the HTTP response.
 
@@ -349,7 +356,8 @@ class _StatusField(Choice):
     def isResolved(self, status):
         return self.isFailure(status) or self.isSuccess(status)
 
-class IWebhookDeliveryAttemptInternalInfo(ICreatedTime):
+
+class IWebhookDeliveryAttemptInternalInfo(_ITimes):
     """
     Internal (debugging) information stored with a delivery
     attempt.
@@ -371,7 +379,7 @@ class IWebhookDeliveryAttemptInternalInfo(ICreatedTime):
     )
 
 
-class IWebhookDeliveryAttempt(IContained, ILastModified):
+class IWebhookDeliveryAttempt(_ITimes, IContained):
     """
     The duration of the request/reply cycle is roughly captured
     by the difference in the ``createdTime`` attributes of the
@@ -438,7 +446,7 @@ class IWebhookDeliveryAttemptSucceededEvent(IWebhookDeliveryAttemptResolvedEvent
 
 
 
-class IWebhookSubscription(IContainerNamesContainer):
+class IWebhookSubscription(_ITimes, IContainerNamesContainer):
     """
     An individual subscription.
     """
@@ -645,8 +653,10 @@ class IWebhookSubscriptionRegistry(Interface):
         :return: A sequence of subscriptions.
         """
 
-class IWebhookSubscriptionManager(IWebhookSubscriptionRegistry,
+class IWebhookSubscriptionManager(_ITimes,
+                                  IWebhookSubscriptionRegistry,
                                   IContainerNamesContainer):
+
     """
     A utility that manages subscriptions.
 

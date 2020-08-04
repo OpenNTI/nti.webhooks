@@ -129,6 +129,8 @@ at a time. First, we'll look at the subscription.
     >>> ext_delivery_attempts = ext_subscription.pop('Contents')
     >>> pprint(ext_subscription)
     {'Class': 'Subscription',
+     'CreatedTime': ...,
+     'Last Modified': ...,
      'active': True,
      'attempt_limit': 50,
      'dialect_id': None,

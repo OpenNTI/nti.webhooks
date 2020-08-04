@@ -37,6 +37,7 @@ from zope.security.testing import Participation
 
 from zope.container.interfaces import INameChooser
 from zope.container.btree import BTreeContainer
+from zope.container.sample import SampleContainer
 from zope.container.constraints import checkObject
 from zope.cachedescriptors.property import CachedProperty
 
@@ -63,16 +64,36 @@ from nti.webhooks.interfaces import WebhookSubscriptionApplicabilityPrecondition
 from nti.webhooks.attempts import WebhookDeliveryAttempt
 from nti.webhooks.attempts import PersistentWebhookDeliveryAttempt
 
+from nti.webhooks._util import DCTimesMixin
+from nti.webhooks._util import PersistentDCTimesMixin
+from nti.webhooks._util import describe_class_or_specification
+
 from persistent import Persistent
 
 logger = __import__('logging').getLogger(__name__)
 
 class _CheckObjectOnSetBTreeContainer(BTreeContainer):
+    """
+    Extending this makes you persistent.
+    """
     # XXX: Taken from nti.containers. Should publish that package.
 
     def _setitemf(self, key, value):
         checkObject(self, key, value)
         super(_CheckObjectOnSetBTreeContainer, self)._setitemf(key, value)
+
+class _CheckObjectOnSetSampleContainer(SampleContainer):
+    """
+    Non-persistent.
+    """
+    def __setitem__(self, key, value):
+        checkObject(self, key, value)
+        super(_CheckObjectOnSetSampleContainer, self).__setitem__(key, value)
+
+    def _newContainerData(self):
+        # We return a BTree so that iteration order is guaranteed.
+        from BTrees import family64
+        return family64.OO.BTree()
 
 
 class IApplicableSubscriptionFactory(Interface): # pylint:disable=inherit-non-class
@@ -98,9 +119,9 @@ class IApplicableSubscriptionFactory(Interface): # pylint:disable=inherit-non-cl
              ILimitedApplicabilityPreconditionFailureWebhookSubscription,
              IAttributeAnnotatable,
              IApplicableSubscriptionFactory)
-class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
+class AbstractSubscription(SchemaConfigured):
     """
-    Default, non-persistent implementation of `IWebhookSubscription`.
+    Subclasses need to extend a ``Container`` implementation.
     """
     for_ = permission_id = owner_id = dialect_id = when = None
     to = u''
@@ -115,8 +136,11 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     fallback_to_unauthenticated_principal = True
 
     def __init__(self, **kwargs):
+        self.createdTime = self.lastModified = time.time()
         SchemaConfigured.__init__(self, **kwargs)
-        _CheckObjectOnSetBTreeContainer.__init__(self)
+
+    def keys(self):
+        raise NotImplementedError
 
     def _setActive(self, active):
         # The public field is readonly; that only kicks in
@@ -130,7 +154,8 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             del self._delivery_applicable_precondition_failed
         # TODO: If we need to, this would be a good place to notify specific
         # events about becoming in/active. The ``I[Un]Registered`` event we use to
-        # call *this* function can be used, but isn't obvious.
+        # call *this* function can be used, but isn't obvious (and the order may be
+        # difficult to define).
 
     def pop(self):
         """Testing only. Removes and returns a random value."""
@@ -162,7 +187,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
                 # XXX: Using the unauthenticated principal when no
                 # principal can be found is elegant. But it makes it
                 # harder to deactivate broken subscriptions (we'd have
-                # to spread this knowledge around oa few functions).
+                # to spread this knowledge around a few functions).
                 # That's why we allow disabling it, and why persistent
                 # subscriptions disable it by default. Maybe there's
                 # something better? Maybe spreading that knowledge is
@@ -204,7 +229,7 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
     def __checkSecurity(self, data):
         """
         Returns a boolean indicating whether *data* passes the security
-        checkes defined for this subscription.
+        checks defined for this subscription.
 
         If we are not able to make the security check because the principal or
         permission we are supposed to use is not defined, returns the special
@@ -247,8 +272,8 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
 
     # We only ever use the ``increment()`` method of this, *or* we
     # delete it (which works even if there's nothing in our ``__dict__``)
-    # when we are making other changes, so subclasses do not need to be
-    # ``PersistentPropertyHolder`` objects.
+    # when we are making other changes, so subclasses do not have to be
+    # ``PersistentPropertyHolder`` objects. (But they are.)
     _delivery_applicable_precondition_failed = NumericPropertyDefaultingToZero(
         '_delivery_applicable_precondition_failed',
         # We have to use NumericMinimum instead of NumericMaximum or
@@ -335,24 +360,32 @@ class Subscription(SchemaConfigured, _CheckObjectOnSetBTreeContainer):
             self.__class__.__name__,
             id(self),
             self.to,
-            self.for_.__name__,
-            self.when.__name__
+            describe_class_or_specification(self.for_),
+            describe_class_or_specification(self.when),
         )
 
-class PersistentSubscription(Subscription, Persistent):
+class Subscription(_CheckObjectOnSetSampleContainer, AbstractSubscription, DCTimesMixin):
+    def __init__(self, **kwargs):
+        AbstractSubscription.__init__(self, **kwargs)
+        _CheckObjectOnSetSampleContainer.__init__(self)
+
+class PersistentSubscription(_CheckObjectOnSetBTreeContainer,
+                             AbstractSubscription,
+                             PersistentDCTimesMixin):
     """
     Persistent implementation of `IWebhookSubscription`
     """
     fallback_to_unauthenticated_principal = False
 
+    def __init__(self, **kwargs):
+        AbstractSubscription.__init__(self, **kwargs)
+        _CheckObjectOnSetBTreeContainer.__init__(self)
+
     def _new_deliveryAttempt(self):
         return PersistentWebhookDeliveryAttempt()
 
-    def __repr__(self):
-        return Persistent.__repr__(self)
-
-    def _p_repr(self):
-        return Subscription.__repr__(self)
+    __repr__ = Persistent.__repr__
+    _p_repr = AbstractSubscription.__repr__
 
 
 def _subscription_full(subscription, strict):
@@ -423,18 +456,18 @@ def deactivate_subscription_when_applicable_limit_exceeded(subscription, event):
     subscription.status_message = _(u'Delivery suspended due to too many precondition failures.')
 
 
-@implementer(IWebhookSubscriptionManager)
-class PersistentWebhookSubscriptionManager(_CheckObjectOnSetBTreeContainer):
+class AbstractWebhookSubscriptionManager(object):
 
     def __init__(self):
-        super(PersistentWebhookSubscriptionManager, self).__init__()
+        super(AbstractWebhookSubscriptionManager, self).__init__()
         self.registry = self._make_registry()
+        self.createdTime = self.lastModified = time.time()
 
     def _make_registry(self):
-        return PersistentComponents()
+        raise NotImplementedError
 
     def _new_Subscription(self, **kwargs):
-        return PersistentSubscription(**kwargs)
+        raise NotImplementedError
 
     def createSubscription(self, to=None, for_=None, when=None,
                            owner_id=None, permission_id=None,
@@ -502,8 +535,10 @@ class GlobalSubscriptionComponents(BaseGlobalComponents):
 
 global_subscription_registry = GlobalSubscriptionComponents('global_subscription_registry')
 
-
-class GlobalWebhookSubscriptionManager(PersistentWebhookSubscriptionManager):
+@implementer(IWebhookSubscriptionManager)
+class GlobalWebhookSubscriptionManager(AbstractWebhookSubscriptionManager,
+                                       _CheckObjectOnSetSampleContainer,
+                                       DCTimesMixin):
 
     def __init__(self, name):
         super(GlobalWebhookSubscriptionManager, self).__init__()
@@ -520,6 +555,21 @@ class GlobalWebhookSubscriptionManager(PersistentWebhookSubscriptionManager):
         return self.__name__
 
 
+@implementer(IWebhookSubscriptionManager)
+class PersistentWebhookSubscriptionManager(AbstractWebhookSubscriptionManager,
+                                           PersistentDCTimesMixin,
+                                           _CheckObjectOnSetBTreeContainer):
+
+    def __init__(self):
+        super(PersistentWebhookSubscriptionManager, self).__init__()
+        self.registry = self._make_registry()
+
+    def _make_registry(self):
+        return PersistentComponents()
+
+    def _new_Subscription(self, **kwargs):
+        return PersistentSubscription(**kwargs)
+
 # The name string must match the variable name to pickle correctly
 global_subscription_manager = GlobalWebhookSubscriptionManager('global_subscription_manager')
 
@@ -527,6 +577,7 @@ def getGlobalSubscriptionManager():
     return global_subscription_manager
 
 def resetGlobals():
+    global_subscription_manager.__dict__.clear()
     global_subscription_manager.__init__('global_subscription_manager')
     global_subscription_registry.__init__('global_subscription_registry')
 
