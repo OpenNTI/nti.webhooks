@@ -146,6 +146,7 @@ class _StatusDescriptor(object):
         if inst.resolved():
             raise AttributeError("Cannot change status once set.")
         self._fp.__set__(inst, value) # This fires IFieldUpdatedEvent
+        inst.lastModified = time.time()
         # Now fire our more specific event, if we've settled
         if not status_field.isResolved(value):
             return
@@ -180,10 +181,12 @@ class WebhookDeliveryAttempt(_Base, Contained):
         self.internal_info.__name__ = 'internal_info'
 
     def __repr__(self):
-        return "<%s.%s at 0x%x status=%r>" % (
+        return "<%s.%s at 0x%x created=%s modified=%s status=%r>" % (
             self.__class__.__module__,
             self.__class__.__name__,
             id(self),
+            self.created,
+            self.modified,
             self.status,
         )
 

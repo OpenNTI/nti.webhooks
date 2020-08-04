@@ -90,6 +90,10 @@ class _CheckObjectOnSetSampleContainer(SampleContainer):
         checkObject(self, key, value)
         super(_CheckObjectOnSetSampleContainer, self).__setitem__(key, value)
 
+    def _newContainerData(self):
+        # We return a BTree so that iteration order is guaranteed.
+        from BTrees import family64
+        return family64.OO.BTree()
 
 
 class IApplicableSubscriptionFactory(Interface): # pylint:disable=inherit-non-class
@@ -559,7 +563,6 @@ class PersistentWebhookSubscriptionManager(AbstractWebhookSubscriptionManager,
     def __init__(self):
         super(PersistentWebhookSubscriptionManager, self).__init__()
         self.registry = self._make_registry()
-        self.createdTime = self.lastModified = time.time()
 
     def _make_registry(self):
         return PersistentComponents()
@@ -574,6 +577,7 @@ def getGlobalSubscriptionManager():
     return global_subscription_manager
 
 def resetGlobals():
+    global_subscription_manager.__dict__.clear()
     global_subscription_manager.__init__('global_subscription_manager')
     global_subscription_registry.__init__('global_subscription_registry')
 

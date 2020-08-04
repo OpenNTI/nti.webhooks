@@ -61,8 +61,8 @@ class MockConnection(object):
     def register(self, obj):
         "Does nothing."
 
-    def setstate(self, *args):
-        raise KeyError
+    # def setstate(self, *args):
+    #     raise KeyError
 
 
 class ReprMixin(object):
@@ -77,7 +77,11 @@ class ReprMixin(object):
         if isinstance(inst, Persistent):
             # pylint:disable=protected-access
             inst._p_jar = MockConnection()
+            # The pure-Python implementation only calls back into the connection
+            # if it has an oid
+            inst._p_oid = b'\x00\x00\x00\x00'
             inst._p_deactivate()
+
             r = repr(inst)
             # Make sure they don't totally override __repr__
             self.assertIn('MockConnection', r)
@@ -126,7 +130,10 @@ class DCTimesMixin(ReprMixin):
         if isinstance(inst, Persistent):
             assert_that(inst, is_(PersistentDCTimesMixin))
             assert_that(type(inst).lastModified, is_(PersistentDCTimesMixin.lastModified))
-            self.assertEqual(inst._p_changed, allow_modified)
+            # In the C implementation, allow_modified for setting the created time always makes
+            # _p_changed True. But in the Python implementation, it doesn't...
+            if inst._p_changed:
+                self.assertTrue(allow_modified, "instance was modified, this must be expected")
 
     def test_IDCTimes_sync_created(self):
         self._check_property_sync(self._makeOne(),

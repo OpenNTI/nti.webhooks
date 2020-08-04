@@ -274,10 +274,13 @@ per-principal.
    True
    >>> subscription.attempt_limit
    50
+   >>> len(subscription)
+   0
 
 The limit doesn't apply to pending attempts, only to successful or
 failed attempts. We can demonstrate this by switching to deferred
-delivery, creating a bunch of attempts, and looking at the length.
+delivery (meaning all attempts stay pending until we wait for them),
+creating a bunch of attempts, and looking at the length.
 
 .. doctest::
 
@@ -295,6 +298,8 @@ oldest attempt is first.
 
 .. doctest::
 
+   >>> list(subscription) == sorted(subscription)
+   True
    >>> all_attempts = list(subscription.values())
    >>> sorted_attempts = sorted(all_attempts, key=lambda attempt: attempt.createdTime)
    >>> all_attempts == sorted_attempts
