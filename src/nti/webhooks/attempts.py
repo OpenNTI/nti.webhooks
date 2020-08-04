@@ -28,6 +28,7 @@ from nti.schema.schema import SchemaConfigured
 from nti.webhooks._util import print_exception_to_text
 from nti.webhooks._util import text_type
 from nti.webhooks._util import DCTimesMixin
+from nti.webhooks._util import PersistentDCTimesMixin
 
 from nti.webhooks.interfaces import IWebhookDeliveryAttempt
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptRequest
@@ -161,7 +162,7 @@ class WebhookDeliveryAttempt(_Base, Contained):
     status = None
     internal_info = None
     createFieldProperties(IWebhookDeliveryAttempt,
-                          omit=('created', 'modified'))
+                          omit=('created', 'modified', 'lastModified'))
     # Allow delayed validation for these things.
     request = None
     response = None
@@ -201,6 +202,7 @@ class WebhookDeliveryAttempt(_Base, Contained):
         return IWebhookDeliveryAttempt['status'].isResolved(self.status)
 
 
-class PersistentWebhookDeliveryAttempt(WebhookDeliveryAttempt, Persistent):
-    # XXX: _p_repr
-    pass
+class PersistentWebhookDeliveryAttempt(WebhookDeliveryAttempt, PersistentDCTimesMixin):
+
+    _p_repr = WebhookDeliveryAttempt.__repr__
+    __repr__ = Persistent.__repr__

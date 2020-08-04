@@ -52,9 +52,7 @@ Dynamic-subscriptions only
 .. todo::  Removing subscriptions when principals are removed.
 .. todo::  API for deleting subscriptions. Probably done by finding
            all subscriptions for a resource/principal.
-.. todo::  Auto-copy principal from interaction when none is given in api?
-.. todo::  Use the nti.zodb properties for the created/last modified time, as
-           appropriate.
+
 
 Thoughts on HTTP API
 --------------------

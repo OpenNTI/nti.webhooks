@@ -129,6 +129,11 @@
             interface="zope.annotation.interfaces.IAttributeAnnotatable"
             />
     </class>
+    <class class=".subscriptions.GlobalWebhookSubscriptionManager">
+        <implements
+            interface="zope.annotation.interfaces.IAttributeAnnotatable"
+            />
+    </class>
 
     <class class=".attempts.WebhookDeliveryAttemptRequest">
         <implements

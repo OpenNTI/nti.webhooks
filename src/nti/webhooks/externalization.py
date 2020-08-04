@@ -19,6 +19,8 @@ from nti.webhooks.interfaces import IWebhookDeliveryAttempt
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptRequest
 from nti.webhooks.interfaces import IWebhookDeliveryAttemptResponse
 
+from nti.webhooks._util import describe_class_or_specification
+
 __all__ = [
     'ISODateExternalizationPolicy',
 ]
@@ -47,8 +49,8 @@ class SubscriptionExternalizer(InterfaceObjectIO):
         result['Contents'] = to_external_object(list(context.values()))
         # TODO: This is a temporary hack. We need to figure out if there is anything
         # useful for receivers to have here or if its better just to omit it.
-        result['for_'] = context.for_.__name__
-        result['when'] = context.when.__name__
+        result['for_'] = describe_class_or_specification(context.for_)
+        result['when'] = describe_class_or_specification(context.when)
         return result
 
 class DeliveryAttemptExternalizer(InterfaceObjectIO):

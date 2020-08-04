@@ -15,6 +15,7 @@ from hamcrest import is_not
 from hamcrest import same_instance
 from hamcrest import has_properties
 
+from persistent import Persistent
 from zope import component
 
 from nti.webhooks import subscriptions
@@ -64,3 +65,6 @@ class TestPersistentSubscription(TestSubscription):
 
     def _makeOne(self):
         return subscriptions.PersistentSubscription()
+
+    def test_persistent(self):
+        assert_that(self._makeOne(), is_(Persistent))

@@ -12,11 +12,13 @@ import datetime
 
 import pytz
 
+from persistent import Persistent
 from zope.dublincore.interfaces import IDCTimes
 from zope.dublincore.interfaces import IZopeDublinCore
 from zope.dublincore.interfaces import IWriteZopeDublinCore
 
 from hamcrest import assert_that
+from hamcrest import is_
 
 from nti.testing.layers import ZopeComponentLayer
 from nti.testing.layers import ConfiguringLayerMixin
@@ -25,7 +27,7 @@ from nti.testing.matchers import has_attr
 
 from nti.webhooks.interfaces import ICreatedTime
 from nti.webhooks.interfaces import ILastModified
-
+from nti.webhooks._util import PersistentDCTimesMixin
 
 class WebhookLayer(ConfiguringLayerMixin,
                    ZopeComponentLayer):
@@ -54,7 +56,34 @@ class WebhookLayer(ConfiguringLayerMixin,
     def testTearDown(cls):
         pass
 
-class DCTimesMixin(object):
+class MockConnection(object):
+
+    def register(self, obj):
+        "Does nothing."
+
+    def setstate(self, *args):
+        raise KeyError
+
+
+class ReprMixin(object):
+
+    def _makeOne(self):
+        raise NotImplementedError
+
+    def test_repr(self):
+        inst = self._makeOne()
+        self.assertIsNotNone(repr(inst))
+
+        if isinstance(inst, Persistent):
+            # pylint:disable=protected-access
+            inst._p_jar = MockConnection()
+            inst._p_deactivate()
+            r = repr(inst)
+            # Make sure they don't totally override __repr__
+            self.assertIn('MockConnection', r)
+
+
+class DCTimesMixin(ReprMixin):
     """
     Test mixin or base for items in this package that
     provide `zope.dublincore.interfaces.IDCTimes` directly
@@ -75,7 +104,13 @@ class DCTimesMixin(object):
         assert_that(inst, validly_provides(ICreatedTime))
         assert_that(inst, validly_provides(ILastModified))
 
-    def _check_property_sync(self, inst, dc_prop, ts_prop, adapted=False):
+    def _check_property_sync(self, inst, dc_prop, ts_prop,
+                             adapted=False, allow_modified=False):
+        # pylint:disable=protected-access
+        if isinstance(inst, Persistent):
+            inst._p_jar = MockConnection()
+            self.assertFalse(inst._p_changed)
+
         setattr(inst, ts_prop, self.ts_in_past)
         assert_that(inst, has_attr(dc_prop, self.datetime_in_past))
 
@@ -88,9 +123,15 @@ class DCTimesMixin(object):
         if adapted:
             from .._util import PartialZopeDublinCoreAdapter
             self.assertIsInstance(inst, PartialZopeDublinCoreAdapter)
+        if isinstance(inst, Persistent):
+            assert_that(inst, is_(PersistentDCTimesMixin))
+            assert_that(type(inst).lastModified, is_(PersistentDCTimesMixin.lastModified))
+            self.assertEqual(inst._p_changed, allow_modified)
 
     def test_IDCTimes_sync_created(self):
-        self._check_property_sync(self._makeOne(), 'created', 'createdTime')
+        self._check_property_sync(self._makeOne(),
+                                  'created', 'createdTime',
+                                  allow_modified=True)
 
     def test_IDCTimes_sync_modified(self):
         self._check_property_sync(self._makeOne(), 'modified', 'lastModified')
@@ -100,7 +141,7 @@ class DCTimesMixin(object):
             IZopeDublinCore(self._makeOne()),
             'created',
             'createdTime',
-            adapted=True)
+            adapted=True, allow_modified=True)
 
     def test_IZopeDublinCore_sync_modified(self):
         self._check_property_sync(
@@ -114,7 +155,7 @@ class DCTimesMixin(object):
             IWriteZopeDublinCore(self._makeOne()),
             'created',
             'createdTime',
-            adapted=True)
+            adapted=True, allow_modified=True)
 
     def test_IWriteZopeDublinCore_sync_modified(self):
         self._check_property_sync(
