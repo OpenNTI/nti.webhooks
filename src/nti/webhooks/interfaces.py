@@ -68,7 +68,7 @@ except ImportError:
         lastModified = Number(
             title=u"The timestamp at which this object or its contents was last modified.",
             default=0.0)
-else:
+else: # pragma: no cover
     from nti.base.interfaces import ILastModified
 
 

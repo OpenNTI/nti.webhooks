@@ -98,6 +98,7 @@ class DCTimesMixin(ReprMixin):
 
     datetime_in_past = datetime.datetime.utcfromtimestamp(123456789)
     ts_in_past = 123456789
+    str_in_past = '1973-11-29T21:33:09Z'
 
     def _makeOne(self):
         raise NotImplementedError
@@ -170,3 +171,15 @@ class DCTimesMixin(ReprMixin):
             'modified',
             'lastModified',
             adapted=True)
+
+    def test_IZopeDublinCore_methods(self):
+        # pylint:disable=too-many-function-args
+        inst = self._makeOne()
+        adapt = IZopeDublinCore(inst)
+        inst.createdTime = self.ts_in_past
+        self.assertEqual(adapt.CreationDate(), self.str_in_past)
+
+
+        inst.craetedTime = 0
+        inst.lastModified = self.ts_in_past
+        self.assertEqual(adapt.ModificationDate(), self.str_in_past)

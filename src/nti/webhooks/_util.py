@@ -102,7 +102,7 @@ class PersistentDCTimesMixin(PersistentPropertyHolder, DCTimesMixin):
     #                                                      as_number=True)
 
     def __new__(cls, *args, **kwargs):
-        if issubclass(cls, Persistent) and not issubclass(cls, PersistentPropertyHolder):
+        if issubclass(cls, Persistent) and not issubclass(cls, PersistentPropertyHolder): # pragma: no cover
             raise TypeError("ERROR: subclassing Persistent, but not PersistentPropertyHolder", cls)
         return super(PersistentDCTimesMixin, cls).__new__(cls, *args, **kwargs)
 
@@ -116,6 +116,13 @@ class PartialZopeDublinCoreAdapter(DCTimesMixin,
 
     You need to add ``lastModified`` to your ``omit`` argument.
     """
+
+    def __init__(self, context):
+        self.context = context
+        ZDCAnnotatableAdapter.__init__(self, context)
+
+    def __getattr__(self, name):
+        return getattr(self.context, name)
 
     # The date properties are returned as ISO8601 strings.
 

@@ -141,7 +141,7 @@ class State(object):
             # Using the property on purpose. We want to be
             # sorted.
             return self.subscription_descriptors == other.subscription_descriptors
-        except AttributeError:
+        except AttributeError: # pragma: no cover
             return NotImplemented
 
 

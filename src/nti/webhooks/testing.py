@@ -115,7 +115,6 @@ def begin_synchronous_delivery():
     This remains in effect until the test is torn down with
     :mod:`zope.testing.cleanup`.
     """
-    from nti.webhooks.interfaces import IWebhookDeliveryManager
     component.getUtility(IWebhookDeliveryManager).executor_service = SequentialExecutorService()
 
 #: Alternate name for `begin_synchronous_delivery` that may
@@ -139,7 +138,7 @@ def _clear_mocks():
 
 try:
     from zope.testing import cleanup # pylint:disable=ungrouped-imports
-except ImportError:
+except ImportError: # pragma: no cover
     pass
 else:
     cleanup.addCleanUp(_clear_mocks)
