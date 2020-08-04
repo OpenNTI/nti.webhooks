@@ -10,10 +10,10 @@ from __future__ import print_function
 from zope.configuration.fields import GlobalObject
 from zope.configuration.fields import Text
 
-from zope import component
 from zope.interface import Interface
 
 from zope.security.zcml import Permission
+from zope.schema import TextLine
 
 from nti.webhooks.subscriptions import getGlobalSubscriptionManager
 from nti.webhooks.interfaces import IWebhookSubscription
@@ -32,7 +32,7 @@ class Path(Text):
     def fromUnicode(self, value):
         result = super(Path, self).fromUnicode(value)
         if not result or not result.startswith('/'):
-            raise ValueError() # XXX: This should be something specific.
+            raise ValueError() # pragma: no cover XXX: This should be something specific.
         return result
 
 
@@ -62,7 +62,16 @@ class IStaticSubscriptionDirective(Interface):
 
     to = IWebhookSubscription['to'].bind(None)
 
-    dialect = IWebhookSubscription['dialect_id'].bind(None)
+    dialect = TextLine(
+        # We can't use the field directly because it wants to validate
+        # against a Choice using a vocabulary based on registered utilities.
+        # That doesn't work as an argument if we're still registering those
+        # utilities.
+        title=IWebhookSubscription['dialect_id'].title,
+        description=IWebhookSubscription['dialect_id'].description,
+        default=IWebhookSubscription['dialect_id'].default,
+        required=False
+    )
 
     owner = IWebhookSubscription['owner_id'].bind(None)
 
@@ -107,6 +116,51 @@ class IStaticPersistentSubscriptionDirective(IStaticSubscriptionDirective):
         required=True,
     )
     # XXX: Active/inactive. Should be able to keep one without losing the history.
+
+
+class IDialectDirective(Interface):
+    """
+    Create a new dialect subclass of `~.DefaultWebhookDialect` and
+    register it as a utility named *name*.
+    """
+
+    # REMEMBER: Keep this in sync with the fields defined in
+    # DefaultWebhookDialect.
+
+    name = TextLine(
+        title=u"Name",
+        description=u"Name of the dialect registration. Limited to ASCII characters.",
+        required=True,
+    )
+
+    externalizer_name = TextLine(
+        title=u"The name of the externalization adapters to use",
+        description=u"Remember, if adapters by this name do not exist, the default will be used.",
+        required=False,
+    )
+
+    externalizer_policy_name = TextLine(
+        title=u'The name of the externalizer policy component to use.',
+        description=u"""
+        .. important::
+            An empty string selects the :mod:`nti.externalization` default
+            policy, which uses Unix timestamps. To use the default policy
+            of :mod:`nti.webhooks`, omit this argument.
+        """,
+        required=False,
+    )
+
+    http_method = TextLine(
+        # Perhaps this should be a choice.
+        title=u"The HTTP method to use.",
+        description=u"This should be a valid method name, but that's not enforced",
+        required=False,
+    )
+
+    user_agent = TextLine(
+        title=u"The User-Agent header string to use.",
+        required=False,
+    )
 
 def _static_subscription_action(subscription_kwargs):
     getGlobalSubscriptionManager().createSubscription(**subscription_kwargs)
@@ -160,4 +214,28 @@ def persistent_subscription(context, site_path=None, **kwargs):
         discriminator=(site_path, tuple(subscription_kwargs.items())),
         callable=_persistent_subscription_action,
         args=(site_path, subscription_kwargs),
+    )
+
+
+def dialect_directive(context, name=None, **kwargs):
+    # By not specifying the kwargs (giving defaults), anything that's not
+    # in the ZCML will be completely absent.
+    from zope.component.zcml import handler
+    from nti.webhooks.dialect import DefaultWebhookDialect
+    from nti.webhooks.interfaces import IWebhookDialect
+
+    if 'externalizer_policy_name' in kwargs and not kwargs['externalizer_policy_name']:
+        # This is how you specify to use the nti.externalization default.
+        kwargs['externalizer_policy_name'] = None
+
+    dialect = type(
+        'ZCMLWebhookDialect-' + str(name),
+        (DefaultWebhookDialect,),
+        kwargs
+    )()
+
+    context.action(
+        discriminator=('webhook-dialect', name),
+        callable=handler,
+        args=('registerUtility', dialect, IWebhookDialect, name, context.info),
     )

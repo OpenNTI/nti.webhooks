@@ -15,6 +15,11 @@
             schema="nti.webhooks.zcml.IStaticPersistentSubscriptionDirective"
             handler="nti.webhooks.zcml.persistent_subscription"
             />
+        <meta:directive
+            name="webhookDialect"
+            schema="nti.webhooks.zcml.IDialectDirective"
+            handler="nti.webhooks.zcml.dialect_directive"
+            />
 
     </meta:directives>
 
