@@ -9,6 +9,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import gc
 import os
 import sys
 import unittest
@@ -19,13 +20,31 @@ docs_dir = '../../../../docs/'
 here_dir = os.path.dirname(os.path.abspath(__file__))
 docs_dir = os.path.abspath(here_dir + '/' + docs_dir)
 
+# For older versions of PyPy, particularly PyPy3,
+# it can collect weakrefs at weird times, and if they've
+# gone missing, generate output to sys.stderr:
+#
+# File "/home/travis/...docs/customizing_payloads.rst", line 372, in customizing_payloads.rst
+# Failed example:
+#     trigger_delivery()
+# Expected nothing
+# Got:
+#     Traceback (most recent call last):
+#       File "/home/travis/virtualenv/pypy3.6-7.1.1/lib-python/3/weakref.py", line 388, in remove
+#         del self.data[k]
+#     KeyError: <weakref at 0x0000000008f3b260; dead>
+#
+# So try to collect at specified times.
+
 def setUp(_test=None):
+    gc.collect()
     cleanup.setUp()
     if docs_dir not in sys.path:
         sys.path.insert(0, docs_dir)
 
 def tearDown(_test=None):
     cleanup.tearDown()
+    gc.collect()
 
 def zodbSetUp(_test=None):
     setUp(_test)
@@ -74,7 +93,6 @@ def test_suite():
             path_rel_to_docs = path_rel_to_docs + '.rst'
         abs_path = os.path.join(docs_dir, path_rel_to_docs)
         rel_to_here = os.path.relpath(abs_path, here_dir)
-        print("File", path_rel_to_docs, 'here', here_dir, 'abs_path', abs_path)
         test = doctest.DocFileSuite(
             rel_to_here,
             optionflags=doctest_flags,
