@@ -15,6 +15,8 @@
 Documentation
 =============
 
+.. TESTS: If you add new files with tests here, be sure to update test_docs.py
+
 .. toctree::
    :maxdepth: 2
 

@@ -4,12 +4,6 @@
 
 .. currentmodule:: nti.webhooks.dialect
 
-.. testsetup::
-
-   from zope.testing import cleanup
-   from nti.webhooks.testing import UsingMocks
-   using_mocks = UsingMocks("POST", 'https://example.com/some/path', status=200)
-
 
 Once an :term:`active` subscription matches and is :term:`applicable`
 for a certain combination of object and event, eventually it's time to
@@ -52,6 +46,9 @@ the objects defined in ``employees.py``:
    ...             when="zope.lifecycleevent.interfaces.IObjectCreatedEvent" />
    ... </configure>
    ... """)
+   >>> from nti.webhooks.testing import mock_delivery_to
+   >>> mock_delivery_to('https://example.com/some/path')
+
 
 Next, we :term:`trigger` the subscription and wait for it to be delivered.
 
@@ -366,7 +363,7 @@ Lets apply some simple customizations and send again.
 .. doctest::
    :hide:
 
-   >>> using_mocks.add('PUT', 'https://example.com/some/path')
+   >>> mock_delivery_to('https://example.com/some/path', 'PUT')
 
 .. doctest::
 
@@ -441,6 +438,5 @@ We can repeat the above example using just ZCML.
 
 .. testcleanup::
 
-   using_mocks.finish()
    from zope.testing import cleanup
    cleanup.cleanUp()

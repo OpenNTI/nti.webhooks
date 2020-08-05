@@ -6,19 +6,11 @@
 
 .. testsetup::
 
-   from zope.testing import cleanup
-   # zope.session is not strict-iro friendly at this time
-   from zope.interface import ro
-   ro.C3.STRICT_IRO = False
-   # We don't establish the securitypolicy, so zope.app.appsetup
-   # complains by logging. Silence that.
-   import logging
-   logging.getLogger('zope.app.appsetup').setLevel(logging.CRITICAL)
-   from nti.webhooks.testing import ZODBFixture
-   ZODBFixture.setUp()
+   from nti.webhooks.tests.test_docs import zodbSetUp
+   zodbSetUp()
 
 A step between :doc:`global, static, transient subscriptions
-<static>` and :doc:`local, runtime-installed history-free
+<static>` and :doc:`local, runtime-installed history-preserving
 subscriptions <dynamic>` are the subscriptions described in this
 document: they are statically configured using ZCML, but instead of
 being global, they are located in the database (in a site manager) and
@@ -27,7 +19,7 @@ store history.
 The ZCML directive is very similar to :class:`IStaticSubscriptionDirective`.
 
 .. autointerface:: IStaticPersistentSubscriptionDirective
-
+   :noindex:
 
 In order to use this directive, there must be at least one site manager
 configured in the main ZODB database. This can be done in a variety of
@@ -512,7 +504,5 @@ previously existing deactivated subscription.
 
 .. testcleanup::
 
-   from zope.testing import cleanup
-   cleanup.cleanUp()
-   ro.C3.STRICT_IRO = ro._ClassBoolFromEnv()
-   ZODBFixture.tearDown()
+   from nti.webhooks.tests.test_docs import zodbTearDown
+   zodbTearDown()
