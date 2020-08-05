@@ -10,11 +10,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-__all__ = ()
+__all__ = (
+    'dispatch_webhook_event',
+)
+
+from itertools import chain
 
 import transaction
 from zope import component
 from zope import interface
+from zope.interface.interfaces import ComponentLookupError
 from zope.lifecycleevent.interfaces import IObjectAddedEvent
 from zope.securitypolicy.interfaces import IPrincipalPermissionManager
 
@@ -23,26 +28,40 @@ from nti.webhooks.interfaces import IWebhookSubscription
 from nti.webhooks.interfaces import IWebhookSubscriptionSecuritySetter
 from nti.webhooks.datamanager import WebhookDataManager
 
+def _utilities_up_tree(data):
+    context = data
+    while context is not None:
+        manager = component.queryNextUtility(context, IWebhookSubscriptionManager)
+        context = manager
+        if manager is not None:
+            yield '<NA>', manager
+
 
 def _find_subscription_managers(data):
     """
     Iterable across subscription managers.
     """
-    # TODO: What's the practical difference using ``getUtilitiesFor`` and manually walking
+    # What's the practical difference using ``getUtilitiesFor`` and manually walking
     # through the tree using ``getNextUtility``? The first makes a single call to the adapter
     # registry and uses its own ``.ro`` to walk up and find utilities. The second uses
     # the ``__bases__`` of the site manager itself to walk up and find only the next utility.
+    # We want to find both. See ``removing_subscriptions.rst`` for an example that
+    # fails if we just use ``getUtilitiesFor``.
     seen_managers = set()
-    for context in None, data:
-        # A context of None means to use the current site manager.
-        sub_managers = component.getUtilitiesFor(IWebhookSubscriptionManager, context)
-        for _name, sub_manager in sub_managers:
-            if sub_manager in seen_managers:
-                # De-dup.
-                continue
-            seen_managers.add(sub_manager)
-            yield sub_manager
 
+    utilities_in_current_site = component.getUtilitiesFor(IWebhookSubscriptionManager)
+    utilities_in_data_site = component.getUtilitiesFor(IWebhookSubscriptionManager, data)
+    utilities_up_tree = _utilities_up_tree(data)
+    it = chain(utilities_in_current_site,
+               utilities_in_data_site,
+               utilities_up_tree)
+
+    for _name, sub_manager in it:
+        if sub_manager in seen_managers:
+            # De-dup.
+            continue
+        seen_managers.add(sub_manager)
+        yield sub_manager
 
 def find_applicable_subscriptions_for(data, event):
     """

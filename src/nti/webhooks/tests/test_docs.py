@@ -114,4 +114,5 @@ def test_suite():
         t('dynamic/customizing_for'),
         t('events'),
         t('externalization'),
+        t('removing_subscriptions'),
     ))

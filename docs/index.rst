@@ -30,6 +30,7 @@ Documentation
    subscription_security
    customizing_payloads
    dynamic
+   removing_subscriptions
    events
    externalization
    api/index

@@ -18,6 +18,7 @@ TESTS_REQUIRE = [
     'zope.securitypolicy', # ZCML directives for granting/denying
     # Easy mocking of ``requests``.
     'responses',
+    'zope.pluggableauth', # principalfolder
     # Simpler site setup than nti.site
     'zope.app.appsetup',
 ]

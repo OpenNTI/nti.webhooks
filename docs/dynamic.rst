@@ -2,6 +2,12 @@
  Dynamic Webhook Subscriptions
 ===============================
 
+.. testsetup::
+
+   from nti.webhooks.tests.test_docs import zodbSetUp
+   zodbSetUp()
+
+
 In addition to static webhook subscriptions defined in ZCML, this
 package supports dynamic webhook subscriptions created, activated,
 inactivated, and removed through code at runtime. Such subscriptions,
@@ -77,9 +83,6 @@ Now we'll create a database and store our hierarchy.
 
 Begin with some common imports and set up the required packages and fixture.
 
-.. The fixture will run zope.testing.cleanup so it needs to happen
-   before the configuration and establishing mocks.
-
 .. doctest::
 
    >>> import transaction
@@ -90,7 +93,6 @@ Begin with some common imports and set up the required packages and fixture.
    >>> from nti.site.testing import print_tree
    >>> from zope.traversing import api as ztapi
    >>> from zope.configuration import xmlconfig
-   >>> ZODBFixture.setUp()
    >>> mock_delivery_to('https://example.com/some/path', method='POST', status=200)
    >>> mock_delivery_to('https://example.com/another/path', method='POST', status=404)
    >>> conf_context = xmlconfig.string("""
@@ -372,8 +374,8 @@ static/global subscription delivery failed.
    0
 
 
+
 .. testcleanup::
 
-   ZODBFixture.tearDown()
-   from zope.testing import cleanup
-   cleanup.cleanUp()
+   from nti.webhooks.tests.test_docs import zodbTearDown
+   zodbTearDown()
