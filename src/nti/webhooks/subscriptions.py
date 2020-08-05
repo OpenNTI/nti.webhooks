@@ -514,6 +514,15 @@ class AbstractWebhookSubscriptionManager(object):
     def subscriptionsToDeliver(self, data, event):
         return self.registry.subscribers((data, event), IWebhookSubscription)
 
+    def deleteSubscriptionsForPrincipal(self, principal_id):
+        # We don't think this will be a performance bottleneck, subscription
+        # counts should be small.
+        # pylint:disable=no-member
+        owned = [(k, v) for k, v in self.items() if v.owner_id == principal_id]
+        for k, _ in owned:
+            del self[k]
+        return owned
+
 
 @component.adapter(IWebhookSubscription, IRegistered)
 def sync_active_status_registered(subscription, _event):

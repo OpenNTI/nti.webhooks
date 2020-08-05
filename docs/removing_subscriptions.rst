@@ -46,14 +46,12 @@ document, we'll be specifying subscription owners and we need the
 adapters to be able to configure the security settings for those
 objects.
 
-.. XXX: Remember to revisit these imports.
 
 .. doctest::
 
 
    >>> from employees import Department, Office, ExternalizableEmployee as Employee
    >>> import transaction
-   >>> from nti.webhooks.testing import ZODBFixture
    >>> from nti.webhooks.testing import DoctestTransaction
    >>> from nti.webhooks.testing import mock_delivery_to
    >>> from nti.site.hostpolicy import install_main_application_and_sites
@@ -114,15 +112,15 @@ using :mod:`zope.pluggableauth.plugins.principalfolder`.
     >>> from zope.pluggableauth.authentication import PluggableAuthentication
     >>> from zope.pluggableauth.plugins.principalfolder import PrincipalFolder
     >>> from zope.pluggableauth.plugins.principalfolder import InternalPrincipal
-    >>> dep_auth = department.getSiteManager()['default']['authentication'] = PluggableAuthentication('nws.')
+    >>> dep_auth = department.getSiteManager()['default']['authentication'] = PluggableAuthentication()
     >>> department.getSiteManager().registerUtility(dep_auth, IAuthentication)
-    >>> nws_principals = PrincipalFolder()
+    >>> nws_principals = PrincipalFolder('nws.')
     >>> dbob_prin = nws_principals['bob'] = InternalPrincipal('login', 'password', 'title')
     >>> dep_auth['principals'] = nws_principals
     >>> dep_auth.authenticatorPlugins = ('principals',)
-    >>> office_auth = office.getSiteManager()['default']['authentication'] = PluggableAuthentication('nws.oun.')
+    >>> office_auth = office.getSiteManager()['default']['authentication'] = PluggableAuthentication()
     >>> office.getSiteManager().registerUtility(office_auth, IAuthentication)
-    >>> office_principals = PrincipalFolder()
+    >>> office_principals = PrincipalFolder('nws.oun.')
     >>> obob_prin = office_principals['bob'] = InternalPrincipal('login', 'password', 'title')
     >>> office_auth['principals'] = office_principals
     >>> office_auth.authenticatorPlugins = ('principals',)
@@ -252,6 +250,225 @@ subscriptions have recorded two delivery attempts.
 
 Registering The Handler
 -----------------------
+
+Lets register the handler and pretend to remove a principal. Hopefully the
+matching subscriptions are removed too.
+
+.. autofunction:: nti.webhooks.subscribers.remove_subscriptions_for_principal
+   :noindex:
+
+.. doctest::
+
+    >>> from nti.webhooks.subscribers import remove_subscriptions_for_principal
+    >>> from zope import component
+    >>> from zope.lifecycleevent import removed
+    >>> component.provideHandler(remove_subscriptions_for_principal)
+    >>> _ = tx.begin()
+    >>> removed(obob_prin)
+    >>> print_tree(department, depth=0, details=('siteManager',))
+    <ISite>: NWS
+         <ISite>: OUN
+             employees
+                 Bob => <Employee Bob 1>
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+                         PersistentSubscription
+                             ... => <...PersistentWebhookDeliveryAttempt ... status='successful'>
+                             ... => <...PersistentWebhookDeliveryAttempt ... status='successful'>
+                     authentication
+                         principals
+                             bob => <....InternalPrincipal object ...>
+         employees
+             Bob => <Employee Bob 0>
+         <Site Manager> name=++etc++site
+             default
+                 WebhookSubscriptionManager
+                     PersistentSubscription
+                         ... => <...PersistentWebhookDeliveryAttempt ... status='failed'>
+                         ... => <...PersistentWebhookDeliveryAttempt ... status='failed'>
+                 authentication
+                     principals
+                         bob => <....InternalPrincipal object ...>
+
+They weren't. In fact, the subscriber didn't even run. Why not?
+
+It turns out the ``InternalPrincipal`` objects don't implement
+``IPrincipal``, so, as the docstring warned, the default registration
+wasn't suitable here. We can fix that and try again.
+
+.. doctest::
+
+    >>> from zope.pluggableauth.plugins.principalfolder import IInternalPrincipal
+    >>> from zope.lifecycleevent.interfaces import IObjectRemovedEvent
+    >>> component.provideHandler(remove_subscriptions_for_principal,
+    ...                          (IInternalPrincipal, IObjectRemovedEvent))
+    >>> removed(obob_prin)
+    Traceback (most recent call last):
+    ...
+    AttributeError: 'InternalPrincipal' object has no attribute 'id'
+
+Narf. Also as the docstring warned, the object being removed isn't
+actually a ``IPrincipal`` and doesn't have a compatible interface. We can fix that
+too! Since it should work this time, we'll actually remove the principal.
+
+.. doctest::
+
+    >>> from nti.webhooks.interfaces import IWebhookPrincipal
+    >>> from zope.interface import implementer
+    >>> @implementer(IWebhookPrincipal)
+    ... @component.adapter(IInternalPrincipal)
+    ... class InternalPrincipalWebhookPrincipal(object):
+    ...    def __init__(self, context):
+    ...        self.id = context.__parent__.getIdByLogin(context.login)
+    >>> component.provideAdapter(InternalPrincipalWebhookPrincipal)
+    >>> del office_principals['bob']
+    >>> print_tree(department, depth=0, details=('siteManager',))
+    <ISite>: NWS
+         <ISite>: OUN
+             employees
+                 Bob => <Employee Bob 1>
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+                     authentication
+                         principals
+         employees
+             Bob => <Employee Bob 0>
+         <Site Manager> name=++etc++site
+             default
+                 WebhookSubscriptionManager
+                     PersistentSubscription
+                         ... => <...PersistentWebhookDeliveryAttempt ... status='failed'>
+                         ... => <...PersistentWebhookDeliveryAttempt ... status='failed'>
+                 authentication
+                     principals
+                         bob => <....InternalPrincipal object ...>
+    >>> tx.finish()
+
+There! That did it.
+
+
+Subscription Managers Outside The Site and Lineage
+--------------------------------------------------
+
+The documentation for :func:`~.remove_subscriptions_for_principal`
+mentions that only subscription managers in the current site
+hierarchy, and the hierarchy of the principal being removed, can be
+removed automatically. If there are subscriptions located outside this area,
+they won't be removed. We can demonstrate this by setting up
+such a subscription. First, we need to add a new site; once that's done, we can
+add the subscription and commit.
+
+.. doctest::
+
+    >>> from nti.webhooks.api import subscribe_in_site_manager
+    >>> _ = tx.begin()
+    >>> office = department['AMA'] = Office()
+    >>> subscribe_in_site_manager(office.getSiteManager(),
+    ...    dict(to='https://example.com', for_=type(office_bob),
+    ...         when=IObjectRemovedEvent, owner_id=u'nws.bob'))
+    <....PersistentSubscription ...>
+    >>> print_tree(department, depth=0, details=('siteManager',))
+    <ISite>: NWS
+         <ISite>: AMA
+             employees
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+                         PersistentSubscription
+         <ISite>: OUN
+             employees
+                 Bob => <Employee Bob 1>
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+                     authentication
+                         principals
+         employees
+             Bob => <Employee Bob 0>
+         <Site Manager> name=++etc++site
+             default
+                 WebhookSubscriptionManager
+                     PersistentSubscription
+                         ... => <...PersistentWebhookDeliveryAttempt ... status='failed'>
+                         ... => <...PersistentWebhookDeliveryAttempt ... status='failed'>
+                 authentication
+                     principals
+                         bob => <....InternalPrincipal object ...>
+    >>> tx.finish()
+
+Now what happens when we delete "nws.bob"? That principal is *above*
+the subscription that was just created.
+
+.. doctest::
+
+    >>> _ = tx.begin()
+    >>> del nws_principals['bob']
+    >>> print_tree(department, depth=0, details=('siteManager',))
+    <ISite>: NWS
+         <ISite>: AMA
+             employees
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+                         PersistentSubscription
+         <ISite>: OUN
+             employees
+                 Bob => <Employee Bob 1>
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+                     authentication
+                         principals
+         employees
+             Bob => <Employee Bob 0>
+         <Site Manager> name=++etc++site
+             default
+                 WebhookSubscriptionManager
+                 authentication
+                     principals
+    >>> tx.abort()
+
+We can see that we deleted the principal, and the subscription at the same level, but
+we didn't find the unrelated subscription.
+
+The solution to this is generally application specific. You can either
+listen for the event yourself, or register an appropriate
+:class:`nti.webhooks.interfaces.IWebhookSubscriptionManagers` adapter. For
+simple, small, applications, the
+:class:`nti.webhooks.subscribers.ExhaustiveWebhookSubscriptionManagers` can be used.
+
+.. doctest::
+
+    >>> from nti.webhooks.subscribers import ExhaustiveWebhookSubscriptionManagers
+    >>> component.provideAdapter(ExhaustiveWebhookSubscriptionManagers, (IInternalPrincipal,))
+    >>> _ = tx.begin()
+    >>> del nws_principals['bob']
+    >>> print_tree(department, depth=0, details=('siteManager',))
+    <ISite>: NWS
+         <ISite>: AMA
+             employees
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+         <ISite>: OUN
+             employees
+                 Bob => <Employee Bob 1>
+             <Site Manager> name=++etc++site
+                 default
+                     WebhookSubscriptionManager
+                     authentication
+                         principals
+         employees
+             Bob => <Employee Bob 0>
+         <Site Manager> name=++etc++site
+             default
+                 WebhookSubscriptionManager
+                 authentication
+                     principals
+    >>> tx.finish()
+
 
 .. testcleanup::
 
