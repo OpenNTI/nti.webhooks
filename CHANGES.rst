@@ -2,7 +2,7 @@
  Changes
 =========
 
-0.0.2 (unreleased)
+0.0.2 (2020-08-06)
 ==================
 
 - Add a subscriber and methods to remove subscriptions when principals
