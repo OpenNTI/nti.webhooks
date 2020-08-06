@@ -4,7 +4,7 @@ import codecs
 from setuptools import setup, find_packages
 
 
-version = '0.0.2'
+version = '0.0.3.dev0'
 
 entry_points = {
 }
