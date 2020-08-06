@@ -30,6 +30,7 @@ Documentation
    subscription_security
    customizing_payloads
    dynamic
+   removing_subscriptions
    events
    externalization
    api/index
@@ -49,9 +50,6 @@ TODO
 Dynamic-subscriptions only
 --------------------------
 
-.. todo::  Removing subscriptions when principals are removed.
-.. todo::  API for deleting subscriptions. Probably done by finding
-           all subscriptions for a resource/principal.
 
 
 Thoughts on HTTP API

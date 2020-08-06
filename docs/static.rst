@@ -204,6 +204,8 @@ Here, we will briefly look at what happens when we attempt to deliver
 this webhook. Recall that it uses a domain that does not exist.
 
 .. seealso:: :doc:`delivery_attempts` for more on delivery attempts.
+.. seealso:: :doc:`customizing_payloads` for information on
+             customizing what is sent in the delivery attempt.
 
 Unsuccessful Delivery Attempts
 ------------------------------

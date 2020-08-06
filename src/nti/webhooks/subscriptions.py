@@ -237,6 +237,7 @@ class AbstractSubscription(SchemaConfigured):
         access is denied by the security policy from the case where requested
         principals are missing.
         """
+
         if not self.permission_id and not self.owner_id:
             # If no security is requested, we're good.
             return True
@@ -287,6 +288,7 @@ class AbstractSubscription(SchemaConfigured):
         # check that.
         assert self.active
         security_check = self.__checkSecurity(data)
+
         if security_check:
             # Yay, access granted!
             # TODO: Should we decrement the failure count here
@@ -511,6 +513,15 @@ class AbstractWebhookSubscriptionManager(object):
 
     def subscriptionsToDeliver(self, data, event):
         return self.registry.subscribers((data, event), IWebhookSubscription)
+
+    def deleteSubscriptionsForPrincipal(self, principal_id):
+        # We don't think this will be a performance bottleneck, subscription
+        # counts should be small.
+        # pylint:disable=no-member
+        owned = [(k, v) for k, v in self.items() if v.owner_id == principal_id]
+        for k, _ in owned:
+            del self[k]
+        return owned
 
 
 @component.adapter(IWebhookSubscription, IRegistered)

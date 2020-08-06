@@ -61,6 +61,9 @@ class DoctestTransaction(mock_db_trans):
     def finish(self):
         return self.__exit__(None, None, None)
 
+    def abort(self):
+        self.__exit__(Exception, Exception(), None)
+
 
 class ZODBFixture(object):
     """

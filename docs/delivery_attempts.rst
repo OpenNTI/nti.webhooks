@@ -80,7 +80,7 @@ do that is already defined.
 .. doctest::
 
    >>> from delivery_helper import deliver_some
-   >>> deliver_some(note='/some/request/path')
+   >>> deliver_some(note=u'/some/request/path')
 
 In the background, the `IWebhookDeliveryManager` is busy invoking the hook. We need to wait for it to
 finish, and then we can examine our delivery attempt:
@@ -201,7 +201,7 @@ communicating with the remote server.
 
    >>> from nti.webhooks.testing import http_requests_fail
    >>> with http_requests_fail():
-   ...     deliver_some(note='this should fail remotely')
+   ...     deliver_some(note=u'this should fail remotely')
    ...     wait_for_deliveries()
    >>> len(subscription)
    1
@@ -228,7 +228,7 @@ Next, a failure to process the response.
 
    >>> from nti.webhooks.testing import processing_results_fail
    >>> with processing_results_fail():
-   ...     deliver_some(note='this should fail locally')
+   ...     deliver_some(note=u'this should fail locally')
    ...     wait_for_deliveries()
    >>> len(subscription)
    1
@@ -350,7 +350,7 @@ Here, we'll demonstrate this for HTTP failures.
    >>> print(subscription.status_message)
    Active
    >>> with http_requests_fail():
-   ...     deliver_some(100, note='this should fail remotely')
+   ...     deliver_some(100, note=u'this should fail remotely')
    ...     wait_for_deliveries()
    >>> len(subscription)
    50
@@ -397,7 +397,7 @@ outcome as for HTTP failures.
 .. doctest::
 
    >>> with processing_results_fail():
-   ...     deliver_some(100, note='this should fail locally')
+   ...     deliver_some(100, note=u'this should fail locally')
    ...     wait_for_deliveries()
    >>> len(subscription)
    50
@@ -427,7 +427,7 @@ Finally, the same results occur for validation failures.
    Active
    >>> from nti.webhooks.testing import target_validation_fails
    >>> with target_validation_fails():
-   ...     deliver_some(100, note='this should fail validation')
+   ...     deliver_some(100, note=u'this should fail validation')
    ...     wait_for_deliveries()
    >>> len(subscription)
    50

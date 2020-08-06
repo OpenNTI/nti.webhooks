@@ -29,9 +29,9 @@ from zope.principalregistry.metadirectives import TextId
 
 from zope.schema import Field
 
-
 from nti.schema.field import Object
 from nti.schema.field import ValidText as Text
+from nti.schema.field import ValidTextLine as TextLine
 from nti.schema.field import ValidChoice as Choice
 from nti.schema.field import ValidURI as URI
 from nti.schema.field import Dict
@@ -688,6 +688,13 @@ class IWebhookSubscriptionManager(_ITimes,
         Given a subscription managed by this object, activate it.
         """
 
+    def deleteSubscriptionsForPrincipal(principal_id):
+        """
+        Remove all subscriptions in this manager owned by *principal_id*.
+
+        (This is the same as the *owner_id* parameter to :meth:`createSubscription`.)
+        """
+
 
 class IWebhookResourceDiscriminator(Interface):
     """
@@ -715,4 +722,36 @@ class IWebhookSubscriptionSecuritySetter(Interface):
     def __call__(subscription): # pylint:disable=signature-differs
         """
         Set the security declarations for the subscription.
+        """
+
+class IWebhookPrincipal(Interface):
+    """
+    A minimal version of :class:`zope.security.interfaces.IPrincipal`.
+
+    This is used by this package when we need to convert an arbitrary
+    object into something that can match up with a ``owner_id``, as
+    used by :class:`IWebhookSubscription`. It is useful if your own objects
+    don't adapt to or implement ``IPrincipal``.
+
+    .. seealso:: nti.webhooks.subscribers.remove_subscriptions_for_principal
+    """
+    # This is copied verbatim from IPrincipal.
+    id = TextLine(
+        title=u"Id",
+        description=u"The unique identification of the principal.",
+        required=True,
+        readonly=True
+    )
+
+class IWebhookSubscriptionManagers(Interface):
+    """
+    Used as an adapter to provide an iterable of potentially interesting
+    or related subscription managers.
+
+    .. seealso::  nti.webhooks.subscribers.remove_subscriptions_for_principal
+    """
+
+    def __iter__():
+        """
+        Provide an iterator over `IWebhookSubscriptionManagers`.
         """

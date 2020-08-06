@@ -80,8 +80,8 @@ Ok, now we can make the deliveries.
    >>> from delivery_helper import wait_for_deliveries
    >>> mock_delivery_to('https://example.com/some/path', method='POST', status=200)
    >>> mock_delivery_to('https://example.com/some/path', method='POST', status=404)
-   >>> deliver_some(note='/some/request/path')
-   >>> deliver_some(note='/another/request/path')
+   >>> deliver_some(note=u'/some/request/path')
+   >>> deliver_some(note=u'/another/request/path')
    >>> wait_for_deliveries()
 
 Externalizing the subscription now produces some useful data.
