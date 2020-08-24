@@ -83,13 +83,8 @@
     <!-- Global event dispatchers are configured in subscribers.zcml -->
 
     <!-- Permissions that we use. -->
-    <!-- These are duplicates, but that's OK: they are compared by ID -->
-    <permission
-        id="nti.actions.create"
-        title="Create new object" />
-    <permission
-        id="nti.actions.delete"
-        title="Delete existing object" />
+    <!-- See notes in this file about configuration conflicts -->
+    <include package="." file="permissions.zcml" />
 
     <subscriber handler=".subscribers.apply_security_to_subscription"
                 trusted="true" />

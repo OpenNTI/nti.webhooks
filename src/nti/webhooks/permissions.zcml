@@ -1,0 +1,24 @@
+<!-- -*- mode: nxml -*- -->
+<configure  xmlns="http://namespaces.zope.org/zope"
+            xmlns:i18n="http://namespaces.zope.org/i18n"
+            i18n_domain="nti.webhooks">
+
+    <include package="zope.component" file="meta.zcml" />
+    <include package="zope.security" file="meta.zcml" />
+
+    <!--
+        Permissions that we use.
+
+        If you define these yourself and find a conflict, or you don't use them at all,
+        then you can exclude these *before* including this package:
+
+        <exclude package="nti.webhooks" file="permissions.zcml" />
+    -->
+    <permission
+        id="nti.actions.create"
+        title="Create new object" />
+    <permission
+        id="nti.actions.delete"
+        title="Delete existing object" />
+
+</configure>
