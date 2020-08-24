@@ -8,7 +8,7 @@ python:
   - pypy3
 script:
   - coverage run -m zope.testrunner --test-path=src  --auto-color --auto-progress
-  - coverage run -m sphinx -b doctest -d docs/_build/doctrees docs docs/_build/doctests
+  - coverage run -a -m sphinx -b doctest -d docs/_build/doctrees docs docs/_build/doctests
 env:
   global:
     - PYTHONHASHSEED=1042466059
