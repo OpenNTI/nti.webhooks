@@ -5,7 +5,12 @@
 0.0.4 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Use a custom ``ITraverser`` when finding sites to install persistent
+  ZCML subscriptions in. This traverser fires ``IBeforeTraverseEvent``
+  notifications, letting subscribers to that (such as
+  ``nti.site.subscribers.threadSiteSubscriber``) take action (such as
+  making sites current when they're about to be traversed). This can
+  help when the site path contains namespaces.
 
 
 0.0.3 (2020-08-24)
