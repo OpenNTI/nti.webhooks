@@ -31,11 +31,21 @@ import contextlib
 import difflib
 import functools
 
+from persistent.mapping import PersistentMapping
 from transaction import TransactionManager
 
 from zope import interface
 from zope import component
+
+from zope.component.hooks import getSite
+from zope.component.hooks import site as current_site
+
+from zope.event import notify
+from zope.location.interfaces import LocationError
+from zope.traversing.interfaces import ITraverser
+from zope.traversing.interfaces import BeforeTraverseEvent
 from zope.traversing import api as ztapi
+from zope.traversing.api import traversePathElement
 
 from zope.processlifetime import IDatabaseOpened
 from zope.generations.interfaces import IInstallableSchemaManager
@@ -44,6 +54,9 @@ from nti.webhooks.interfaces import IWebhookSubscriptionManager
 from nti.webhooks.api import subscribe_in_site_manager
 
 logger = __import__('logging').getLogger(__name__)
+
+text_type = type(u'')
+_marker = object()
 
 class IPersistentWebhookSchemaManager(IInstallableSchemaManager):
     """
@@ -63,6 +76,53 @@ class IPersistentWebhookSchemaManager(IInstallableSchemaManager):
         we need a new generation.
         """
 
+@interface.implementer(ITraverser)
+class ConnectionRootTraverser(object):
+    # Similar to default traverser, zope.traversing.adapters.Traverser,
+    # but fires BeforeTraverseEvent, and has some enhanced handling of internal
+    # double // to avoid firing that event more than once.
+
+    def __init__(self, context):
+        self.context = context
+
+    def traverse(self, path, default=_marker, request=None):
+        if not path:
+            return self.context
+
+        # The default traverser accepts an iterable of path segments in addition
+        # to a string, but we know where we're coming from and only accept a string.
+        # Py2: Testing: Decode bytes to the expected Unicode.
+        path = path.decode('utf-8') if isinstance(path, bytes) else path
+        __traceback_info__ = path
+        path = path.split(u'/')
+        path.reverse()
+        pop_path_element = path.pop
+
+        # One way we differ is that when the path is absolute, we don't
+        # need to use ``ILocationInfo(self.context).getRoot()``.
+        # In fact we must be an absolute path because we always start at the
+        # physical root.
+        assert not path[-1]
+        pop_path_element()
+
+        curr = self.context
+        with current_site(getSite()):
+            try:
+                while path:
+                    name = pop_path_element()
+                    if not name:
+                        # Trailing or internal double /
+                        continue
+
+                    notify(BeforeTraverseEvent(curr, request))
+                    curr = traversePathElement(curr, name, path, request=request)
+                return curr
+            except LocationError:
+                if default is _marker:
+                    raise
+                return default
+
+
 @functools.total_ordering
 class SubscriptionDescriptor(object):
 
@@ -72,15 +132,24 @@ class SubscriptionDescriptor(object):
         self.site_path = site_path
         self._subscription_kwargs = tuple(sorted(subscription_kwargs.items()))
 
-    def find_site(self, root):
-        # However, an absolute path wants to convert
-        # the context argument (connection.root()) into
-        # an ILocationInfo object so it can ask it what its root is.
-        # That can't be done, by default. We could either provide an adapter
-        # or a proxy, or we can just make the path non-absolute here, since
-        # we're starting from the database root.
-        site_path = self.site_path[1:]
-        return ztapi.traverse(root, site_path)
+    def find_site(self, connection_root):
+        """
+        Given the root of a connection (a
+        :class:`persistent.mapping.PersistentMapping`), traverse from
+        it to the *site_path* and return the found site.
+
+        Unlike straightforward traversal, this will notify
+        :class:`zope.traversing.interfaces.IBeforeTraverseEvent` before traversing into
+        each object,
+        allowing things like :func:`nti.site.subscribers.threadSiteSubscriber` to do its work.
+
+        Before this method returns, the site that was current when it began is restored.
+        """
+        assert isinstance(connection_root, PersistentMapping)
+        # Directly create the ITraverser we want to use. We're solving a local problem
+        # here, keep the solution local.
+        traverser = ConnectionRootTraverser(connection_root)
+        return ztapi.traverse(traverser, self.site_path)
 
     @property
     def subscription_kwargs(self):
