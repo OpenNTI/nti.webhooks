@@ -48,6 +48,29 @@ class TestConnectionRootTraverser(CleanUp,
         context = PersistentMapping()
         self.assertIs(self._makeOne(context).traverse(None), context)
 
+    def test_traverse_dot(self):
+        context = TraversablePersistentMapping()
+        self.assertIs(self._makeOne(context).traverse('/.'), context)
+
+    def test_traverse_slash(self):
+        context = TraversablePersistentMapping()
+        self.assertIs(self._makeOne(context).traverse('/'), context)
+
+    def test_traverse_trailing_slash(self):
+        context = TraversablePersistentMapping(foo=42)
+        t = self._makeOne(context)
+        self.assertEqual(t.traverse('/foo'), 42)
+        self.assertEqual(t.traverse('/foo/'), 42)
+
+    def test_traverse_double_slash(self):
+        inner = TraversablePersistentMapping(biz=42)
+        context = TraversablePersistentMapping(foo=inner)
+        t = self._makeOne(context)
+        self.assertEqual(t.traverse('/foo/biz'), 42)
+        self.assertEqual(t.traverse('/foo/biz/'), 42)
+        self.assertEqual(t.traverse('/foo//biz'), 42)
+        self.assertEqual(t.traverse('/foo//biz/'), 42)
+        self.assertEqual(t.traverse('/foo//biz//'), 42)
 
     def test_restores_site_and_fires_events(self):
         from zope.component.hooks import site as current_site
@@ -61,11 +84,13 @@ class TestConnectionRootTraverser(CleanUp,
         site1 = TrivialSite(LocalSiteManager(None))
 
         site2 = TrivialSite(LocalSiteManager(None))
+        site2.installed = 0
 
         def before_traverse(evnt):
             self.assertIsInstance(evnt, BeforeTraverseEvent)
             setSite(site2)
-            site2.installed = 1
+            # Increment to see if this event is fired multiple times.
+            site2.installed += 1
 
         event.subscribers.append(before_traverse)
 
@@ -73,12 +98,14 @@ class TestConnectionRootTraverser(CleanUp,
         context['foo'] = 42
         with current_site(site1):
             t = self._makeOne(context)
-            result = t.traverse(u'/foo')
+            # Note the trailing slashes; even so we only fire
+            # the event once.
+            result = t.traverse(u'/foo//')
             self.assertEqual(result, 42)
             # The site was restored
             self.assertIs(getSite(), site1)
 
-        self.assertTrue(site2.installed)
+        self.assertEqual(site2.installed, 1)
 
         site2.installed = 0
 

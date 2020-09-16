@@ -79,7 +79,8 @@ class IPersistentWebhookSchemaManager(IInstallableSchemaManager):
 @interface.implementer(ITraverser)
 class ConnectionRootTraverser(object):
     # Similar to default traverser, zope.traversing.adapters.Traverser,
-    # but fires BeforeTraverseEvent.
+    # but fires BeforeTraverseEvent, and has some enhanced handling of internal
+    # double // to avoid firing that event more than once.
 
     def __init__(self, context):
         self.context = context
@@ -88,15 +89,19 @@ class ConnectionRootTraverser(object):
         if not path:
             return self.context
 
-        assert isinstance(path, text_type)
+        # The default traverser accepts an iterable of path segments in addition
+        # to a string, but we know where we're coming from and only accept a string.
+        # Py2: Testing: Decode bytes to the expected Unicode.
+        path = path.decode('utf-8') if isinstance(path, bytes) else path
         __traceback_info__ = path
         path = path.split(u'/')
         path.reverse()
         pop_path_element = path.pop
 
-        # We differ in that when the path is absolute, we don't
+        # One way we differ is that when the path is absolute, we don't
         # need to use ``ILocationInfo(self.context).getRoot()``.
-        # In fact we must be an absolute path.
+        # In fact we must be an absolute path because we always start at the
+        # physical root.
         assert not path[-1]
         pop_path_element()
 
@@ -104,8 +109,12 @@ class ConnectionRootTraverser(object):
         with current_site(getSite()):
             try:
                 while path:
-                    notify(BeforeTraverseEvent(curr, request))
                     name = pop_path_element()
+                    if not name:
+                        # Trailing or internal double /
+                        continue
+
+                    notify(BeforeTraverseEvent(curr, request))
                     curr = traversePathElement(curr, name, path, request=request)
                 return curr
             except LocationError:
