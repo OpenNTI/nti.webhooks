@@ -2,7 +2,7 @@
  Changes
 =========
 
-0.0.4 (unreleased)
+0.0.4 (2020-09-16)
 ==================
 
 - Use a custom ``ITraverser`` when finding sites to install persistent
