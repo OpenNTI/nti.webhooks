@@ -5,7 +5,7 @@
 0.0.5 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add support for Python 3.9.
 
 
 0.0.4 (2020-09-16)
