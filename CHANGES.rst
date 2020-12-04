@@ -5,8 +5,10 @@
 0.0.5 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add support for Python 3.9.
 
+- Principal IDs are no longer required to be URIs or dotted names. See
+  `issue 21 <https://github.com/NextThought/nti.webhooks/issues/21>`_.
 
 0.0.4 (2020-09-16)
 ==================
