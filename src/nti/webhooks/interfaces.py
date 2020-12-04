@@ -25,8 +25,6 @@ from zope.componentvocabulary.vocabulary import UtilityNames
 from zope.dublincore.interfaces import IDCTimes
 from zope.lifecycleevent.interfaces import IObjectModifiedEvent
 
-from zope.principalregistry.metadirectives import TextId
-
 from zope.schema import Field
 
 from nti.schema.field import Object
@@ -40,6 +38,7 @@ from nti.schema.field import Timedelta
 from nti.schema.field import Bool
 
 from nti.webhooks._schema import HTTPSURL
+from nti.webhooks._schema import PermissivePrincipalId
 
 # pylint:disable=inherit-non-class,no-self-argument,no-method-argument,
 # pylint:disable=too-many-ancestors
@@ -499,9 +498,7 @@ class IWebhookSubscription(_ITimes, IContainerNamesContainer):
         required=True,
     )
 
-    owner_id = TextId(
-        # XXX: This might not work. zope.schema.Id requires dotted names or URIs;
-        # not all principal IDs are guaranteed to be that.
+    owner_id = PermissivePrincipalId(
         title=u"The ID of the ``IPrincipal`` that owns this subscription.",
         description=u"""
         This will be validated at runtime when an event arrives. If

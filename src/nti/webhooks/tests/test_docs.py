@@ -115,4 +115,5 @@ def test_suite():
         t('events'),
         t('externalization'),
         t('removing_subscriptions'),
+        doctest.DocTestSuite('nti.webhooks._schema', optionflags=doctest_flags),
     ))
