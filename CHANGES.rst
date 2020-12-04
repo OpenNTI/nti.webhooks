@@ -2,7 +2,7 @@
  Changes
 =========
 
-0.0.5 (unreleased)
+0.0.5 (2020-12-04)
 ==================
 
 - Add support for Python 3.9.
