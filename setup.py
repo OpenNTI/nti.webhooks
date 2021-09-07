@@ -12,6 +12,9 @@ entry_points = {
 TESTS_REQUIRE = [
     'coverage',
     'nti.testing >= 3.0.0',
+    # CAUTION: Fudge uses 2to3 during installation, which
+    # means cached wheels can't be shared between Python 2 and
+    # Python 3 environments. Take note of that in CI.
     'fudge',
     'zope.testrunner',
     'zope.lifecycleevent',
