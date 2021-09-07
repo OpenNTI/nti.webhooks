@@ -15,6 +15,8 @@ TESTS_REQUIRE = [
     # CAUTION: Fudge uses 2to3 during installation, which
     # means cached wheels can't be shared between Python 2 and
     # Python 3 environments. Take note of that in CI.
+    # Also, support for 2to3 was removed in setuptools 58.0.0.
+    # ARGH!
     'fudge',
     'zope.testrunner',
     'zope.lifecycleevent',

@@ -28,8 +28,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-${{ matrix.python-version }}
     - name: Install dependencies
+      # setuptools 58 removed support for 2to3, which fudge depends
+      # on.
       run: |
-        python -m pip install -U pip setuptools wheel
+        python -m pip install -U pip "setuptools < 58" wheel
         python -m pip install -U coverage
         python -m pip install -U -e ".[test,docs]"
     - name: Test
