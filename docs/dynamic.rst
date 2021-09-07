@@ -191,11 +191,11 @@ case the same thing that ``office_bob`` provides:
 
    >>> from zope.interface import providedBy
    >>> subscription.for_
-   <implementedBy employees.ExternalizableEmployee>
+   classImplements(ExternalizableEmployee)
    >>> subscription.for_.__name__
    'employees.ExternalizableEmployee'
    >>> providedBy(office_bob)
-   <implementedBy employees.ExternalizableEmployee>
+   classImplements(ExternalizableEmployee)
    >>> providedBy(office_bob).inherit
    <class 'employees.ExternalizableEmployee'>
 

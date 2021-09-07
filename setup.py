@@ -11,7 +11,7 @@ entry_points = {
 
 TESTS_REQUIRE = [
     'coverage',
-    'nti.testing',
+    'nti.testing >= 3.0.0',
     'fudge',
     'zope.testrunner',
     'zope.lifecycleevent',
@@ -66,7 +66,7 @@ setup(
         'futures; python_version == "2.7"',
         'zope.authentication', # IAuthentication
         'zope.annotation', # IAttributeAnnotatable
-        'zope.interface >= 5.1',
+        'zope.interface >= 5.4.0',
         'zope.container',
         'zope.security', # IPrincipal, Permission
         'zope.principalregistry', # TextId
@@ -76,13 +76,14 @@ setup(
         'zope.generations', # schema installers
         'zope.site',
         'nti.site >= 2.2.0',
-        'nti.zodb',
+        'nti.zodb >= 1.3.0',
         # Consistent interface resolution order in 2.0;
-        # externalization policies in 2.1.
-        'nti.externalization >= 2.1.0',
-        'nti.schema',
+        # externalization policies in 2.1. Potentially useful base classes
+        # in 2.3.0.
+        'nti.externalization >= 2.3.0',
+        'nti.schema >= 1.16.0',
         'setuptools',
-        'transaction',
+        'transaction >= 3.0.1',
     ],
     entry_points=entry_points,
     include_package_data=True,

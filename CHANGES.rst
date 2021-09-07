@@ -5,7 +5,9 @@
 0.0.6 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Make subscriptions, delivery attempts, delivery attempt requests,
+  and delivery attempt responses have a ``mimeType`` value when
+  externalized.
 
 
 0.0.5 (2020-12-04)
