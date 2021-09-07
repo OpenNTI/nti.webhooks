@@ -2,7 +2,7 @@
  Changes
 =========
 
-0.0.6 (unreleased)
+0.0.6 (2021-09-07)
 ==================
 
 - Make subscriptions, delivery attempts, delivery attempt requests,
