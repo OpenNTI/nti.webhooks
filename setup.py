@@ -51,6 +51,8 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        # 3.10 support is pending zodbpickle support for 3.10.
+        # 'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Framework :: Zope3',
@@ -91,7 +93,13 @@ setup(
         'test': TESTS_REQUIRE,
         'docs': [
             'Sphinx',
-            'sphinx_rtd_theme',
+            # sphinx_rtd_theme 0.5.2 requires docutils < 0.17,
+            # and certain versions of the pip resolver give us 0.17.1
+            # when we ``pip install .[test,docs]``
+            # but then error out because of the conflict (even though
+            # things work fine). This is an attempt to fix that.
+            'sphinx_rtd_theme == 0.5.2',
+            'docutils < 0.17',
             'repoze.sphinx.autointerface',
         ] + TESTS_REQUIRE,
     },

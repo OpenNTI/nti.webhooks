@@ -9,7 +9,6 @@
   and delivery attempt responses have a ``mimeType`` value when
   externalized.
 
-
 0.0.5 (2020-12-04)
 ==================
 
