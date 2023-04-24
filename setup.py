@@ -41,7 +41,7 @@ setup(
     long_description=_read('README.rst') + '\n\n' + _read('CHANGES.rst'),
     license='Apache',
     keywords='webhook server event zope ZODB',
-    url='https://github.com/NextThought/nti.webhooks',
+    url='https://github.com/OpenNTI/nti.webhooks',
     project_urls={
         'Documentation': 'https://ntiwebhooks.readthedocs.io/en/latest/',
     },
@@ -49,6 +49,7 @@ setup(
         'Intended Audience :: Developers',
         'Natural Language :: English',
         'Operating System :: OS Independent',
+        'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
